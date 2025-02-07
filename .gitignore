@@ -1,6 +1,9 @@
 /packages
 .packages
 
+/.venv
+..venv
+
 # macOS files
 .DS_Store
 
