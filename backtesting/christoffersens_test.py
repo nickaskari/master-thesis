@@ -35,6 +35,8 @@ def christoffersen_independence_test(failures):
 
 ################################################ SMALL TEST ################################################
 
+
+''' 
 # Example: Simulated sequence of VaR failures (1 = failure, 0 = no failure)
 np.random.seed(42)  # Set seed for reproducibility
 failures = np.random.choice([0, 1], size=250, p=[0.95, 0.05])  # Simulating 5% failure rate
@@ -43,3 +45,4 @@ failures = np.random.choice([0, 1], size=250, p=[0.95, 0.05])  # Simulating 5% f
 LR_stat, p_val = christoffersen_independence_test(failures)
 
 print(LR_stat, p_val)
+'''
