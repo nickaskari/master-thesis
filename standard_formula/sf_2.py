@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
 
+from dotenv.main import load_dotenv
+load_dotenv(override=True)
+import os
+
 print("\n")
 
 def calculate_market_scr(
@@ -12,7 +16,7 @@ def calculate_market_scr(
     spread_shocks=None,  #  credit quality steps
     interest_rate_shocks_up=None,  
     interest_rate_shocks_down=None,
-    liability_value=0.7,  # Specifies the asset/liability ratio, given that assets are 1.0
+    liability_value=float(os.getenv("FRAC_LIABILITIES")),  # Specifies the asset/liability ratio, given that assets are 1.0 
     liability_duration=3 # unsure about this value
 ):
     if spread_shocks is None:
