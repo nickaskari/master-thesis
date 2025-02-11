@@ -4,6 +4,7 @@ import pandas as pd
 from dotenv.main import load_dotenv
 load_dotenv(override=True)
 import os
+import scipy.interpolate
 
 print("\n")
 
@@ -28,15 +29,19 @@ def calculate_market_scr(
         
     
     if interest_rate_shocks_up is None:
-        interest_rate_shocks_up = {1: 0.61, 2: 0.53, 3: 0.49, 4: 0.46, 5: 0.45, 6: 0.41, 7: 0.39, 
-                                   8: 0.38, 9: 0.37, 10: 0.36,11: 0.36, 12: 0.35, 13: 0.35, 14: 0.34, 
-                                   15: 0.34, 16: 0.33, 17: 0.33, 18: 0.32, 19: 0.32, 20: 0.32, 90: 0.20}
-
+        interest_rate_shocks_up = {1: 0.70, 2: 0.70, 3: 0.64, 4: 0.59, 5: 0.55, 6: 0.52, 7: 0.49, 
+                               8: 0.47, 9: 0.44, 10: 0.42, 11: 0.39, 12: 0.37, 13: 0.35, 14: 0.34, 
+                               15: 0.33, 16: 0.31, 17: 0.30, 18: 0.29, 19: 0.27, 20: 0.26, 90: 0.20}
 
     if interest_rate_shocks_down is None:
-        interest_rate_shocks_down = {1: -0.58, 2: -0.51, 3: -0.44, 4: -0.40, 5: -0.37, 6: -0.35, 7: -0.34,
-                                    8: -0.33, 9: -0.31, 10: -0.30, 11: -0.30, 12: -0.29, 13: -0.28, 14: -0.28, 
-                                    15: -0.27, 16: -0.28, 17: -0.28, 18: -0.28, 19: -0.29, 20: -0.29, 90: -0.20}
+        interest_rate_shocks_down = {1: -0.75, 2: -0.65, 3: -0.56, 4: -0.50, 5: -0.46, 6: -0.42, 7: -0.39,
+                                 8: -0.36, 9: -0.33, 10: -0.31, 11: -0.30, 12: -0.29, 13: -0.28, 14: -0.28, 
+                                 15: -0.27, 16: -0.28, 17: -0.28, 18: -0.28, 19: -0.29, 20: -0.29, 90: -0.20}
+
+    yield_curve = {
+        0: 0.0343, 1: 0.0343, 2: 0.0311, 3: 0.0293, 4: 0.0283,
+        5: 0.0277, 6: 0.0274, 7: 0.0272, 8: 0.0271, 9: 0.0272, 10: 0.0273
+    }
 
 
     total_assets = sum(asset_values.values()) 
@@ -54,22 +59,49 @@ def calculate_market_scr(
         asset_duration = 0
     print(f"asset_duration: {asset_duration}")
 
+    yield_maturities = np.array(list(yield_curve.keys()))
+    yield_rates = np.array(list(yield_curve.values()))
 
+    interpolate_yield = scipy.interpolate.interp1d(yield_maturities, yield_rates, kind="linear", fill_value="extrapolate")
+
+    base_rate_liability = interpolate_yield(liability_duration)
+    base_discount_factor = 1 / ((1 + base_rate_liability) ** liability_duration)
     
+    '''
     avg_interest_rate_up = np.mean([interest_rate_shocks_up[min(interest_rate_shocks_up.keys(), key=lambda x: abs(x - d))]
                                     for d in durations.values()])    
     avg_interest_rate_down = np.mean([interest_rate_shocks_down[min(interest_rate_shocks_down.keys(), key=lambda x: abs(x - d))]
                                       for d in durations.values()])
     # maybe one should interpolate the interest rate shocks, instead of using the nearest one
+    print(f"up {avg_interest_rate_up} \n down {avg_interest_rate_down}")
+    '''
+    shock_maturities = np.array(list(interest_rate_shocks_up.keys()))
+    shock_up_values = np.array(list(interest_rate_shocks_up.values()))
+    shock_down_values = np.array(list(interest_rate_shocks_down.values()))
+
+    interpolate_up = scipy.interpolate.interp1d(shock_maturities, shock_up_values, kind="linear", fill_value="extrapolate")
+    interpolate_down = scipy.interpolate.interp1d(shock_maturities, shock_down_values, kind="linear", fill_value="extrapolate")
+
+    shocked_rate_up = base_rate_liability * (1 + interpolate_up(liability_duration))
+    shocked_rate_down = base_rate_liability * (1 + interpolate_down(liability_duration))
+
+    shocked_discount_factor_up = 1 / ((1 + shocked_rate_up) ** liability_duration)
+    shocked_discount_factor_down = 1 / ((1 + shocked_rate_down) ** liability_duration)
+
+    pv_liability_base = liability_value * base_discount_factor
+    pv_liability_up = liability_value * shocked_discount_factor_up
+    pv_liability_down = liability_value * shocked_discount_factor_down
+
+    print(f"Base PV of Liabilities: {pv_liability_base}")
+    print(f"Shocked PV Up: {pv_liability_up}")
+    print(f"Shocked PV Down: {pv_liability_down}")
+
+    delta_bof_up = (-total_fixed_income * asset_duration * interpolate_up(asset_duration)) + \
+        (pv_liability_up -pv_liability_base)
 
 
-    delta_bof_up = (-total_fixed_income * asset_duration * avg_interest_rate_up) + \
-        (liability_value * liability_duration * avg_interest_rate_up)
-    # When interest rates rise, asset values fall and liabilities fall 
-    # liabilities fall because they are discounted at a higher rate
-
-    delta_bof_down = (-total_fixed_income * asset_duration * avg_interest_rate_down) + \
-                 (liability_value * liability_duration * avg_interest_rate_down)
+    delta_bof_down = (-total_fixed_income * asset_duration * interpolate_down(asset_duration)) + \
+        (pv_liability_down -pv_liability_base)
 
     # interest rate risk, not sure
     market_scr_interest = max(abs(delta_bof_up), abs(delta_bof_down))
