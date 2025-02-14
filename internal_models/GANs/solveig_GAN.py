@@ -16,10 +16,10 @@ class GAN:
         os.makedirs(f"generated_returns_{self.asset_name}", exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=300, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=1000, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
-        parser.add_argument("--latent_dim", type=int, default=200, help="dimensionality of the latent space")
+        parser.add_argument("--latent_dim", type=int, default=1200, help="dimensionality of the latent space")
         parser.add_argument("--window_size", type=int, default=252, help="size of the rolling window in days (1 year)")
         parser.add_argument("--sample_interval", type=int, default=400, help="interval between sampling generated return sequences")
 
@@ -115,8 +115,10 @@ class Generator(nn.Module):
 
         self.model = nn.Sequential(
             nn.Linear(opt.latent_dim, 256),
+            nn.BatchNorm1d(256),  # Batch Normalization
             nn.ReLU(),
             nn.Linear(256, 256),
+            nn.BatchNorm1d(256),  # Batch Normalization
             nn.ReLU(),
             nn.Linear(256, int(np.prod(input_shape)))
         )
@@ -125,17 +127,32 @@ class Generator(nn.Module):
         returns = self.model(noise)
         return returns.view(returns.size(0), *self.input_shape)
 
+
 class Discriminator(nn.Module):
     def __init__(self, input_shape):
         super(Discriminator, self).__init__()
         self.input_shape = input_shape
 
         self.model = nn.Sequential(
-            nn.Linear(int(np.prod(input_shape)), 400),
+            nn.Linear(int(np.prod(input_shape)), 800),
+            nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(400, 400),
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(400, 1)
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),  # Batch Normalization
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),  # Batch Normalization
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),  # Batch Normalization
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(800, 800),
+            nn.BatchNorm1d(800),  # Batch Normalization
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(800, 1)
         )
 
     def forward(self, returns):
