@@ -68,27 +68,43 @@ class WGAN_GP:
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         return gradient_penalty
 
-
-    def generate_scenarios(self, num_scenarios=1000):
+    def generate_scenarios(self, num_scenarios=10000):
         self.generator.eval()  # Set generator to evaluation mode
 
         all_generated_returns = []
         batch_size = 1000  # Generate in batches to avoid memory issues
 
         with torch.no_grad():
-            for _ in range(num_scenarios // batch_size):
+            for _ in range(max(1, num_scenarios // batch_size)):  # Ensure loop runs at least once
                 z = torch.normal(0, 0.02, size=(batch_size, self.opt.latent_dim)).to('cuda' if self.cuda else 'cpu')
                 gen_returns = self.generator(z).cpu().numpy()
 
-                # Reshape for inverse transform
-                gen_returns = self.scaler.inverse_transform(gen_returns.reshape(gen_returns.shape[0], -1))  
-                gen_returns = gen_returns.reshape(-1, self.opt.window_size, 1)  # Reshape back to original format
+                # Debugging: Print generated returns shape
+                print(f"Generated batch shape: {gen_returns.shape}")
 
+                if gen_returns.size == 0:
+                    print("Warning: Generated returns are empty!")
+                    continue
+
+                # Check if scaler is fitted before inverse transform
+                if not hasattr(self.scaler, "mean_"):
+                    raise ValueError("Scaler was not fitted! Check data preprocessing.")
+
+                gen_returns = self.scaler.inverse_transform(gen_returns.reshape(gen_returns.shape[0], -1))
                 all_generated_returns.append(gen_returns)
+
+        # Debugging: Check list content
+        if len(all_generated_returns) == 0:
+            raise ValueError("No valid scenarios were generated! Check GAN training or batch size.")
 
         # Concatenate all batches into a single array
         all_generated_returns = np.vstack(all_generated_returns)
-        np.save(f'generated_returns_{self.asset_name}/final_50000_scenarios.npy', all_generated_returns)
+
+        # Convert to PyTorch tensor before saving
+        all_generated_returns = torch.tensor(all_generated_returns, dtype=torch.float32)
+        torch.save(all_generated_returns, f'generated_returns_{self.asset_name}/final_scenarios.pt')
+        print(f"Saved {all_generated_returns.shape[0]} scenarios for {self.asset_name}.")
+
 
 
     def setup(self):
@@ -112,7 +128,7 @@ class WGAN_GP:
 
                 # Train Critic
                 self.optimizer_C.zero_grad()
-                z = torch.normal(0, 0.2, size=(batch_size, self.opt.latent_dim)).to(real_returns.device)
+                z = torch.normal(0, 1.0, size=(batch_size, self.opt.latent_dim)).to(real_returns.device)
                 gen_returns = self.generator(z)
                 real_validity = self.critic(real_returns)
                 fake_validity = self.critic(gen_returns.detach())
@@ -146,8 +162,8 @@ class Generator(nn.Module):
 
         def block(in_feat, out_feat, normalize=True):
             layers = [nn.Linear(in_feat, out_feat)]
-            if normalize:
-                layers.append(nn.BatchNorm1d(out_feat, 0.8))  # Normalize for stability
+          # if normalize:
+           #     layers.append(nn.BatchNorm1d(out_feat, 0.8))  # Normalize for stability
             layers.append(nn.LeakyReLU(0.2, inplace=True))  # Changed from ReLU to LeakyReLU
             return layers
 
