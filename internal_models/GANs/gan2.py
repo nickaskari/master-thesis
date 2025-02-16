@@ -35,7 +35,7 @@ class GAN2:
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr_g", type=float, default=0.0002, help="learning rate for generator")
         parser.add_argument("--lr_d", type=float, default=0.00005, help="learning rate for discriminator")
-        parser.add_argument("--latent_dim", type=int, default=800, help="dimensionality of the latent space")
+        parser.add_argument("--latent_dim", type=int, default=1000, help="dimensionality of the latent space")
         parser.add_argument("--window_size", type=int, default=252, help="size of the rolling window in days (1 year)")
         parser.add_argument("--sample_interval", type=int, default=400, help="interval between sampling generated return sequences")
         
@@ -169,11 +169,11 @@ class Discriminator(nn.Module):
             nn.Linear(int(np.prod(input_shape)), 1000),
             nn.BatchNorm1d(1000),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.3),
+            nn.Dropout(0.4),
             nn.Linear(1000, 1000),
             nn.BatchNorm1d(1000),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.3),
+            nn.Dropout(0.4),
             nn.Linear(1000, 1)  # Single output neuron for real/fake classification
         )
 
