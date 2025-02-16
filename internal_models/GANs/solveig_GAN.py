@@ -16,10 +16,10 @@ class GAN:
         os.makedirs(f"generated_returns_{self.asset_name}", exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=1000, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=1500, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
-        parser.add_argument("--latent_dim", type=int, default=1200, help="dimensionality of the latent space")
+        parser.add_argument("--latent_dim", type=int, default=1500, help="dimensionality of the latent space")
         parser.add_argument("--window_size", type=int, default=252, help="size of the rolling window in days (1 year)")
         parser.add_argument("--sample_interval", type=int, default=400, help="interval between sampling generated return sequences")
 
@@ -123,6 +123,21 @@ class Generator(nn.Module):
             nn.Linear(256, int(np.prod(input_shape)))
         )
 
+        ''' BAD
+        self.model = nn.Sequential(
+            nn.utils.spectral_norm(nn.Linear(opt.latent_dim, 512)),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.utils.spectral_norm(nn.Linear(512, 512)),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.utils.spectral_norm(nn.Linear(512, 256)),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.utils.spectral_norm(nn.Linear(256, int(np.prod(input_shape))))
+        )'''
+
+
     def forward(self, noise):
         returns = self.model(noise)
         return returns.view(returns.size(0), *self.input_shape)
@@ -137,21 +152,27 @@ class Discriminator(nn.Module):
             nn.Linear(int(np.prod(input_shape)), 800),
             nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
             nn.Linear(800, 800),
             nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
             nn.Linear(800, 800),
             nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
             nn.Linear(800, 800),
             nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
             nn.Linear(800, 800),
             nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
             nn.Linear(800, 800),
             nn.BatchNorm1d(800),  # Batch Normalization
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
             nn.Linear(800, 1)
         )
 
