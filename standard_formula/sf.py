@@ -1,5 +1,8 @@
+import os
 import numpy as np
 import scipy.interpolate
+from dotenv.main import load_dotenv
+load_dotenv(override=True)
 
 
 def calculate_asset_pv(asset_values, durations, yield_curve, interest_rate_shocks, scenario='base'):
@@ -107,8 +110,8 @@ def calculate_market_scr(
     spread_shocks_corp=None,
     interest_rate_shocks_up=None, 
     interest_rate_shocks_down=None, 
-    liability_value=0.7, 
-    liability_duration=4.5
+    liability_value=float(os.getenv("FRAC_LIABILITIES")),
+    liability_duration=float(os.getenv("LIABILITY_DURATION"))
 ):
     if spread_shocks_corp is None:
         spread_shocks_corp = {'AAA': 0.009, 'AA': 0.011,
