@@ -99,8 +99,16 @@ def calculate_market_risk_scr(market_scr_interest, market_scr_equity, market_scr
 
 
 def calculate_market_scr(
-    asset_values, durations, equity_shock_global=-0.39, equity_shock_other=-0.49, real_estate_shock=-0.25, spread_shocks_corp=None,
-    interest_rate_shocks_up=None, interest_rate_shocks_down=None, liability_value=0.7, liability_duration=3
+    asset_values,
+    durations, 
+    equity_shock_global=-0.39, 
+    equity_shock_other=-0.49, 
+    real_estate_shock=-0.25, 
+    spread_shocks_corp=None,
+    interest_rate_shocks_up=None, 
+    interest_rate_shocks_down=None, 
+    liability_value=0.7, 
+    liability_duration=4.5
 ):
     if spread_shocks_corp is None:
         spread_shocks_corp = {'AAA': 0.009, 'AA': 0.011,
