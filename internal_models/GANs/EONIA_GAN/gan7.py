@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 class GAN7:
-    def __init__(self, returns_df, asset_name, lambda_decay=0.01):
+    def __init__(self, returns_df, asset_name, lambda_decay=0.1):
         self.returns_df = returns_df
         self.asset_name = asset_name
         self.lambda_decay = lambda_decay  # Decay rate for recency bias
@@ -38,26 +38,35 @@ class GAN7:
         self.optimizer_D = None
 
     def create_rolling_returns(self, returns_df):
-        """ Prepares rolling return windows and assigns regime labels. """
+        """ Prepares rolling return windows and assigns regime labels using percentile-based thresholds. """
         window_size = self.opt.window_size
         scaler = StandardScaler()
         scaled_returns = scaler.fit_transform(returns_df.values.reshape(-1, 1))
 
-        rolling_returns, labels = [], []
+        rolling_returns, trends = [], []
+        
+        # Step 1: Compute trends first
         for i in range(len(scaled_returns) - window_size):
             window = scaled_returns[i:i + window_size]
             rolling_returns.append(window)
-
-            # Compute trend to determine regime
             trend = np.polyfit(np.arange(window_size), window.flatten(), 1)[0]
-            if trend > 0.00001:
+            trends.append(trend)
+
+        # Step 2: Compute dynamic thresholds (percentiles)
+        rising_threshold = np.percentile(trends, 99) 
+        falling_threshold = np.percentile(trends, 1) 
+        
+        labels = []
+        for trend in trends:
+            if trend > rising_threshold:
                 labels.append(0)  # Rising
-            elif trend < -0.00001:
+            elif trend < falling_threshold:
                 labels.append(1)  # Falling
             else:
                 labels.append(2)  # Stable
 
         return np.array(rolling_returns), np.array(labels), scaler
+
 
     def setup(self):
         """ Sets up the data loader with weighted sampling for recency bias. """
