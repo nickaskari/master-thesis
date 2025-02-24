@@ -171,3 +171,12 @@ durations = {
 scr_results = calculate_market_scr(asset_values, durations)
 for key, value in scr_results.items():
     print(f"{key}: {value:,.3f}")
+
+
+'''
+This implementation is based on Gatzert & Martin (2012) 
+
+It gives roughly the same results (Market SCR) as our internal model from the project thesis using t-student
+- Indicating that s
+'''
+
