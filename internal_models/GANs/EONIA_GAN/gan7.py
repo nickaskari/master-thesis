@@ -17,7 +17,7 @@ class GAN7:
         os.makedirs(f"generated_returns_{self.asset_name}", exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=1000, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=1800, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr_g", type=float, default=0.0002, help="learning rate for generator")
         parser.add_argument("--lr_d", type=float, default=0.00005, help="learning rate for discriminator")
@@ -181,11 +181,14 @@ class Discriminator(nn.Module):
             nn.Linear(int(np.prod(input_shape)) + 10, 1000),
             nn.BatchNorm1d(1000),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.3),
+            nn.Dropout(0.1),
             nn.Linear(1000, 1000),
             nn.BatchNorm1d(1000),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.3),
+            nn.Dropout(0.1),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.1),
             nn.Linear(1000, 1)
         )
 
