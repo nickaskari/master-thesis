@@ -1,13 +1,11 @@
 import pandas as pd  
 import numpy as np
-from scipy.stats import t, rankdata
-from copulae import StudentCopula
 import matplotlib.pyplot as plt
 from dotenv.main import load_dotenv
 load_dotenv(override=True)
 import os
 
-class MonteCarloCopula:
+class MonteCarloVanillaGBM:
 
     def __init__(self, returns_df, weights):
         self.returns_df = returns_df
@@ -18,39 +16,47 @@ class MonteCarloCopula:
         self.asset_classes = returns_df.columns
         self.weights = weights
 
-    def transform_to_uniorm_marginal(self):
-        return self.returns_df.apply(lambda x: rankdata(x) / (len(x) + 1), axis=0)
-    
-    def fit_student_copula(self, uniform_data):
-        ndim = uniform_data.shape[1]
-        t_cop = StudentCopula(dim=ndim)
-        t_cop.fit(uniform_data)
-        return t_cop
+        # PARAMTERS FOR GBM
+        self.T = int(os.getenv("N_DAYS"))
+        num_assets = len(returns_df.columns)
+        self.S0 = np.array([100] * num_assets)  
+        self.dt = 1
 
-    def generate_uniform_samples(self, uniform_data):
-        t_cop = self.fit_student_copula(uniform_data)
-        samples = t_cop.random(self.n_simulations * self.n_days).to_numpy()
-        
-        reshaped_samples = samples.reshape(self.n_simulations, self.n_days, uniform_data.shape[1])
-        
-        return reshaped_samples
+        self.mu = returns_df.mean().values  # Mean daily return for each asset
+        self.sigma = returns_df.std().values
 
 
-    def get_simulated_returns(self, uniform_data):
-        simulated_uniforms = self.generate_uniform_samples(uniform_data)
-        simulated_returns = np.zeros_like(simulated_uniforms)
+    def simulate_assets(self):
+        simulated_final_prices = {}
 
-        # Fit Student-t marginals to each asset's returns
-        for i, col in enumerate(self.returns_df.columns):
-            params = t.fit(self.returns_df[col])  # Fit Student-t distribution for each asset
-            simulated_returns[:, :, i] = t.ppf(simulated_uniforms[:, :, i], *params)
+        np.random.seed(42)
+        for i, asset in enumerate(asset_names):
+            Z = np.random.normal(0, 1, (T, N_sim))  # Independent shocks
+            r_sim = (mu[i] - 0.5 * sigma[i]**2) * dt + sigma[i] * np.sqrt(dt) * Z  # Log returns
 
-        return simulated_returns
-    
-    def get_cumulative_returns(self, simulated_returns):
-        portfolio_returns = np.sum(simulated_returns * self.weights, axis=2)
-        cumulative_returns = np.prod(1 + portfolio_returns, axis=1) - 1
-        return cumulative_returns
+            S = np.zeros((T, N_sim))
+            S[0, :] = S0[i]
+
+            for t in range(1, T):
+                S[t, :] = S[t-1, :] * np.exp(r_sim[t, :])
+
+            simulated_final_prices[asset] = S[-1, :] # final prices
+
+            expected_value_gbm = S0[i] * np.exp(mu[i] * time)
+
+            plt.figure(figsize=(10, 6))
+            for path in S.T:
+                plt.plot(time, path, color='lightgray', linewidth=0.5)
+            plt.plot(time, expected_value_gbm, color='red',
+                    linewidth=2, label='Expected Value')
+            plt.title(f'Geometric Brownian Motion Sample Paths for {asset}')
+            plt.xlabel('Time')
+            plt.ylabel('S(t)')
+            plt.legend()
+            plt.grid(True)
+
+            plt.show()
+        return
     
     def calculate_distribution_and_scr(self):
         BOF_0 = self.assets_0 - self.liabilities_0  

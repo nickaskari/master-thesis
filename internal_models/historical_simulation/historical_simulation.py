@@ -40,18 +40,3 @@ class HistoricalSimulation:
         scr = np.percentile(bof_change, 100 * (1 - 0.995))
 
         return bof_change, scr
-
-    def plot_bof_var(self, bof_change, scr):
-        plt.figure(figsize=(10, 6))
-        plt.hist(bof_change / 1e6, bins=100, alpha=0.7, color='c', label='Change in BOF Distribution', density=True)
-        plt.axvline(scr / 1e6, color='r', linestyle='--', label=f'VaR (99.5%): {scr / 1e6:.2f}M')
-        plt.title('Distribution of Change in BOF after 1 Year (Historical Simulation)')
-        plt.xlabel('Change in BOF (Millions)')
-        plt.ylabel('Density')
-
-        plt.xlim(-1, 1)
-        plt.xticks(np.arange(-1, 1.1, 0.5))  # Increments of 0.5 within the range [-1, 1]
-
-        plt.legend()
-        plt.grid(True)
-        plt.show()

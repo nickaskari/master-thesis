@@ -12,8 +12,8 @@ import numpy as np
 import torch
 from sklearn.preprocessing import PowerTransformer
 
-
-class GAN10:
+# SPECIALIZED FOR EONIA
+class WillowGAN:
     def __init__(self, returns_df, asset_name, lambda_decay=0.99):
         self.returns_df = returns_df
         self.asset_name = asset_name
