@@ -1,6 +1,9 @@
 # master-thesis
 Master Thesis at TIØ4900 by Nick Askari and Simen Peder Stang.
 
+Code is ran using a homemade distributed system created by us,
+Find it at: https://github.com/nickaskari/compute-farm
+
 ## Setting up Virtual Environment (we are calling it "packages")
 
 ```sh
