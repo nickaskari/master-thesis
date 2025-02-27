@@ -12,7 +12,6 @@ class MonteCarloVanillaGBM:
         self.assets_0 = int(os.getenv("INIT_ASSETS"))
         self.liabilities_0 = int(os.getenv("INIT_ASSETS")) * float(os.getenv("FRAC_LIABILITIES"))
         self.n_simulations = int(os.getenv("N_SIMULATIONS"))
-        self.n_days = int(os.getenv("N_DAYS"))
         self.asset_classes = returns_df.columns
         self.weights = weights
 
@@ -29,21 +28,24 @@ class MonteCarloVanillaGBM:
     def simulate_assets(self):
         simulated_final_prices = {}
 
+        time = np.linspace(0, self.T, self.T)
+
         np.random.seed(42)
-        for i, asset in enumerate(asset_names):
-            Z = np.random.normal(0, 1, (T, N_sim))  # Independent shocks
-            r_sim = (mu[i] - 0.5 * sigma[i]**2) * dt + sigma[i] * np.sqrt(dt) * Z  # Log returns
+        for i, asset in enumerate(self.asset_classes):
+            Z = np.random.normal(0, 1, (self.T, self.n_simulations))  # Independent shocks
+            r_sim = (self.mu[i] - 0.5 * self.sigma[i]**2) * self.dt + self.sigma[i] * np.sqrt(self.dt) * Z  # Log returns
 
-            S = np.zeros((T, N_sim))
-            S[0, :] = S0[i]
+            S = np.zeros((self.T, self.n_simulations))
+            S[0, :] = self.S0[i]
 
-            for t in range(1, T):
+            for t in range(1, self.T):
                 S[t, :] = S[t-1, :] * np.exp(r_sim[t, :])
 
             simulated_final_prices[asset] = S[-1, :] # final prices
 
-            expected_value_gbm = S0[i] * np.exp(mu[i] * time)
+            expected_value_gbm = self.S0[i] * np.exp(self.mu[i] * time)
 
+            '''
             plt.figure(figsize=(10, 6))
             for path in S.T:
                 plt.plot(time, path, color='lightgray', linewidth=0.5)
@@ -54,24 +56,29 @@ class MonteCarloVanillaGBM:
             plt.ylabel('S(t)')
             plt.legend()
             plt.grid(True)
+            '''
 
             plt.show()
-        return
+
+        return simulated_final_prices
     
     def calculate_distribution_and_scr(self):
-        BOF_0 = self.assets_0 - self.liabilities_0  
-        uniform_data = self.transform_to_uniorm_marginal()
-        simulated_returns = self.get_simulated_returns(uniform_data)
-        simulated_cumulative_returns = self.get_cumulative_returns(simulated_returns)
+        BOF_0 = self.assets_0 - self.liabilities_0
+        stored_simulated_data = self.simulate_assets()
 
-        # Extract cumulative returns for EONIA (7th asset, index 6)
-        simulated_returns_eonia = simulated_returns[:, :, 6]  # Last day cumulative returns for EONIA
-        # Compute cumulative returns for EONIA over 252 trading days
-        cumulative_returns_eonia = np.prod(1 + simulated_returns_eonia, axis=1) - 1  # Shape: (num_simulations,)
+        yearly_returns = {
+            asset: stored_simulated_data[asset] / 100 - 1 for asset in self.asset_classes
+        }
 
+        returns_matrix = np.array(list(yearly_returns.values()))  
+        portfolio_returns = np.dot(self.weights, returns_matrix) 
 
-        assets_t1 = self.assets_0 * (1 + simulated_cumulative_returns)  # Assets after 1 year
-        liabilities_t1 = self.liabilities_0 * (1 + cumulative_returns_eonia)  # Liabilities after 1 year
+        eonia_returns = yearly_returns["EONIA"]
+
+        
+
+        assets_t1 = self.assets_0 * (1 + portfolio_returns)
+        liabilities_t1 = self.liabilities_0 * (1 + eonia_returns)
 
         bof_t1 = assets_t1 - liabilities_t1
         bof_change = bof_t1 - BOF_0

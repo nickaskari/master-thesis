@@ -4,15 +4,18 @@ from scipy.stats import t, rankdata
 from copulae import StudentCopula
 import matplotlib.pyplot as plt
 from dotenv.main import load_dotenv
+from tqdm import tqdm  # ✅ Import tqdm for progress tracking
+
 load_dotenv(override=True)
 import os
+import sys
 
 class MonteCarloCopula:
 
     def __init__(self, returns_df, weights):
         self.returns_df = returns_df
         self.assets_0 = int(os.getenv("INIT_ASSETS"))
-        self.liabilities_0 = int(os.getenv("INIT_ASSETS")) * float(os.getenv("FRAC_LIABILITIES"))
+        self.liabilities_0 = self.assets_0 * float(os.getenv("FRAC_LIABILITIES"))
         self.n_simulations = int(os.getenv("N_SIMULATIONS"))
         self.n_days = int(os.getenv("N_DAYS"))
         self.asset_classes = returns_df.columns
@@ -35,16 +38,15 @@ class MonteCarloCopula:
         
         return reshaped_samples
 
-
-    def get_simulated_returns(self, uniform_data):
-        simulated_uniforms = self.generate_uniform_samples(uniform_data)
+    def get_simulated_returns(self, uniform_data, pbar):
+        simulated_uniforms = self.generate_uniform_samples(uniform_data) 
+        pbar.update(1)
         simulated_returns = np.zeros_like(simulated_uniforms)
 
-        # Fit Student-t marginals to each asset's returns
         for i, col in enumerate(self.returns_df.columns):
             params = t.fit(self.returns_df[col])  # Fit Student-t distribution for each asset
             simulated_returns[:, :, i] = t.ppf(simulated_uniforms[:, :, i], *params)
-
+        
         return simulated_returns
     
     def get_cumulative_returns(self, simulated_returns):
@@ -54,22 +56,27 @@ class MonteCarloCopula:
     
     def calculate_distribution_and_scr(self):
         BOF_0 = self.assets_0 - self.liabilities_0  
-        uniform_data = self.transform_to_uniorm_marginal()
-        simulated_returns = self.get_simulated_returns(uniform_data)
-        simulated_cumulative_returns = self.get_cumulative_returns(simulated_returns)
 
-        # Extract cumulative returns for EONIA (7th asset, index 6)
-        simulated_returns_eonia = simulated_returns[:, :, 6]  # Last day cumulative returns for EONIA
-        # Compute cumulative returns for EONIA over 252 trading days
-        cumulative_returns_eonia = np.prod(1 + simulated_returns_eonia, axis=1) - 1  # Shape: (num_simulations,)
+        with tqdm(total=5, desc="Monte Carlo w Copulas", unit="step") as pbar:
+            uniform_data = self.transform_to_uniorm_marginal()
+            pbar.update(1)  # Step 1 done
 
+            simulated_returns = self.get_simulated_returns(uniform_data, pbar)  
 
-        assets_t1 = self.assets_0 * (1 + simulated_cumulative_returns)  # Assets after 1 year
-        liabilities_t1 = self.liabilities_0 * (1 + cumulative_returns_eonia)  # Liabilities after 1 year
+            simulated_cumulative_returns = self.get_cumulative_returns(simulated_returns)
+            pbar.update(1)  # Step 3 done
 
-        bof_t1 = assets_t1 - liabilities_t1
-        bof_change = bof_t1 - BOF_0
+            # Extract cumulative returns for EONIA (7th asset, index 6)
+            simulated_returns_eonia = simulated_returns[:, :, 6]  
+            cumulative_returns_eonia = np.prod(1 + simulated_returns_eonia, axis=1) - 1  
 
-        scr = np.percentile(bof_change, 100 * (1 - 0.995))
+            assets_t1 = self.assets_0 * (1 + simulated_cumulative_returns)  
+            liabilities_t1 = self.liabilities_0 * (1 + cumulative_returns_eonia)  
+
+            bof_t1 = assets_t1 - liabilities_t1
+            bof_change = bof_t1 - BOF_0
+
+            scr = np.percentile(bof_change, 100 * (1 - 0.995))
+            pbar.update(1)  
 
         return bof_change, scr
