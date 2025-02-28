@@ -26,3 +26,9 @@ Installing all libraries from requirements.txt,
 ```sh
 pip install -r requirements.txt
 ```
+
+TODO:
+1. Fix Json saving and loading
+2. Run the GANS, double check plots
+3. Add Wasserstein plots
+4. Fix backtesting

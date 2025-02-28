@@ -124,31 +124,23 @@ class WillowGAN:
 
                 gen_returns = self.generator(z, labels).cpu().numpy()
 
-                # Print debugging info BEFORE transformation
-                print(f"Generated Returns (first 10 values): {gen_returns.flatten()[:10]}")
-                print(f"Contains NaN before transformation: {np.isnan(gen_returns).any()}")
-
                 # Clip extreme values before inverse transformation
                 gen_returns = np.clip(gen_returns, -1e3, 1e3)
-
-                # Print debugging info AFTER clipping
-                print(f"Generated Returns after Clipping (first 10 values): {gen_returns.flatten()[:10]}")
-                print(f"Contains NaN after clipping: {np.isnan(gen_returns).any()}")
 
                 try:
                     gen_returns = self.scaler.inverse_transform(gen_returns.reshape(-1, 1)).reshape(batch_size, -1)
                 except ValueError:
                     print("Warning: Inverse transform failed due to extreme values")
                     gen_returns = np.nan_to_num(gen_returns, nan=np.median(self.returns_df.values))
-
-                # Print debugging info AFTER inverse transform
-                print(f"Generated Returns after Inverse Transform (first 10 values): {gen_returns.flatten()[:10]}")
-                print(f"Contains NaN after inverse transform: {np.isnan(gen_returns).any()}")
-
+                    
                 all_generated_returns.append(gen_returns)
 
         all_generated_returns = np.vstack(all_generated_returns)
-        torch.save(torch.tensor(all_generated_returns), f'generated_returns_{self.asset_name}/final_scenarios.pt')
+        save_dir = "../../../generated_GAN_output"
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save the tensor in the specified directory
+        torch.save(torch.tensor(all_generated_returns), os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt'))
 
 
 

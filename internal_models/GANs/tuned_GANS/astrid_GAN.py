@@ -122,7 +122,13 @@ class AstridGAN:
                 all_generated_returns.append(gen_returns)
 
         all_generated_returns = np.vstack(all_generated_returns)
-        torch.save(torch.tensor(all_generated_returns), f'generated_returns_{self.asset_name}/final_scenarios.pt')
+
+        save_dir = "../../../generated_GAN_output"
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save the tensor in the specified directory
+        torch.save(torch.tensor(all_generated_returns), os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt'))
+
 
 class Generator(nn.Module):
     def __init__(self, opt, input_shape):
