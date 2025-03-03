@@ -7,6 +7,8 @@ from scipy.spatial.distance import pdist
 from sklearn.decomposition import PCA
 from scipy import stats
 import os
+from scipy.stats import wasserstein_distance
+from scipy.spatial import cKDTree
 
 
 def create_rolling_empirical(returns_df, window_size=252):
@@ -71,6 +73,7 @@ def check_mode_collapse(real_returns, generated_returns):
 def analyse_assets(returns_df, precomputed_rolling_returns):
     asset_names = returns_df.columns
 
+    results = []
     for asset_name in asset_names:
         # Print a boxed title before analyzing each asset
         title = f" ANALYZING ASSET: {asset_name} "
@@ -89,7 +92,13 @@ def analyse_assets(returns_df, precomputed_rolling_returns):
 
         if asset_name != 'EONIA':
             extreme_value_analysis(asset_name, precomputed_rolling_returns)
+            nearest_distance_histogram(asset_name, precomputed_rolling_returns)
 
+        result = wasserstein_distance_analysis(asset_name, precomputed_rolling_returns)
+        results.append(result)
+
+
+    wasserstein_distance_plot(results)
 
 
 # ---------- HISTOGRAM PLOT FUNCTION ---------- #
@@ -229,6 +238,99 @@ def load_generated_returns(asset_name):
 
     return gen_returns
 
+def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns):
+
+    title = f" COMPUTING WASSERSTEIN DISTANCE: {asset_name} "
+    print("\n" + "═" * (len(title) + 4))
+    print(f"║{title.center(len(title) + 2)}║")
+    print("═" * (len(title) + 4) + "\n")
+
+    # Load the generated returns
+    gen_returns = load_generated_returns(asset_name)
+    gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy().flatten()
+
+    # Retrieve precomputed empirical returns
+    empirical_returns = precomputed_rolling_returns[asset_name].flatten()
+
+    # Ensure both have the same length by truncating
+    min_length = min(len(empirical_returns), len(gen_returns))
+    real_data = empirical_returns[:min_length]
+    generated_data = gen_returns[:min_length]
+
+    # Compute Wasserstein Distance
+    w_distance = wasserstein_distance(real_data, generated_data)
+
+    print(f"📊 Wasserstein Distance for {asset_name}: {w_distance:.6f}\n")
+
+    return asset_name, w_distance  # Return values for external use
+
+def wasserstein_distance_plot(results):
+    asset_names, wasserstein_distances = zip(*results)
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(asset_names, wasserstein_distances, color='purple', alpha=0.7)
+
+    plt.xticks(rotation=45, ha="right", fontsize=12)
+    plt.ylabel("Wasserstein Distance", fontsize=14)
+    plt.xlabel("Asset", fontsize=14)
+    plt.title("Wasserstein Distance Between Empirical & Generated Returns", fontsize=16)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+    
+    plt.tight_layout()
+    plt.show()
+
+def nearest_distance_histogram(asset_name, precomputed_rolling_returns, bins=50):
+    title = f" COMPUTING NEAREST DISTANCE HISTOGRAM: {asset_name} "
+    print("\n" + "═" * (len(title) + 4))
+    print(f"║{title.center(len(title) + 2)}║")
+    print("═" * (len(title) + 4) + "\n")
+
+    # Load generated returns
+    gen_returns = load_generated_returns(asset_name)
+    gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy()
+
+    # Retrieve empirical returns
+    empirical_returns = precomputed_rolling_returns[asset_name]
+
+    # Normalize data before distance computation
+    real_data = (empirical_returns.flatten() - np.mean(empirical_returns)) / np.std(empirical_returns)
+    generated_data = (gen_returns.flatten() - np.mean(gen_returns)) / np.std(gen_returns)
+
+    # Build KDTree for nearest-neighbor search
+    tree = cKDTree(real_data.reshape(-1, 1))
+    distances, _ = tree.query(generated_data.reshape(-1, 1), k=1)
+
+    # Print distance summary for debugging
+    print(f"\n📊 Distance Summary for {asset_name}:")
+    print(f"Min Distance: {distances.min():.6f}")
+    print(f"Max Distance: {distances.max():.6f}")
+    print(f"Mean Distance: {distances.mean():.6f}")
+    print(f"Median Distance: {np.median(distances):.6f}")
+    print(f"Standard Deviation: {distances.std():.6f}")
+
+    # **Fix 1: Trim Outliers Beyond the 99.5th Percentile**
+    threshold = np.percentile(distances, 99.5)  # Exclude extreme outliers
+    distances = distances[distances <= threshold]
+
+    # **Fix 2: Improved binning strategy**
+    min_dist, max_dist = distances.min(), distances.max()
+    bins = np.linspace(min_dist, max_dist, bins)  # Evenly spaced bins within a controlled range
+
+    # Plot histogram
+    plt.figure(figsize=(8, 5))
+    plt.hist(distances, bins=bins, color="lightblue", edgecolor="black", alpha=0.7)
+
+    # **Fix 3: Apply Symlog Scaling for Better Visibility**
+    plt.xscale("symlog", linthresh=1e-4)  # Keeps small values visible without over-compressing larger ones
+
+    plt.xlabel("Distance to nearest empirical data point", fontsize=12)
+    plt.ylabel("Number of generated data points", fontsize=12)
+    plt.title(f"Nearest Distance Histogram for {asset_name}", fontsize=14)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    plt.tight_layout()
+    plt.show()
+    
 def extensive_plotting(scaled, returns_df):
     precomputed_rolling_returns = {asset: create_rolling_empirical(returns_df[asset].values) for asset in returns_df.columns}
     
