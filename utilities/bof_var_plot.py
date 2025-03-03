@@ -1,8 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import pandas as pd
 
 def plot_bof_var(bof_change, scr, title, bof_0):
+
+    bof_change = np.array(bof_change)
+
     scr_percentage = (scr / bof_0) * 100  # Calculate SCR as % of BOF_0
     bof_change_millions = bof_change / 1e6  # Convert to millions
 

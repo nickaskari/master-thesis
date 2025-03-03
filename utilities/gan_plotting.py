@@ -102,7 +102,8 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, bins=5
 
     for asset_name in asset_names:
         # Load the generated returns
-        gen_returns = torch.load(f'generated_returns_{asset_name}/final_scenarios.pt').cpu().detach().numpy()
+        #gen_returns = torch.load(f'generated_returns_{asset_name}/final_scenarios.pt').cpu().detach().numpy()
+        gen_returns = load_generated_returns(asset_name).cpu().detach().numpy()
 
         # Ensure no NaNs in generated returns
         if np.isnan(gen_returns).any() or np.isinf(gen_returns).any():
@@ -213,7 +214,7 @@ def extreme_value_analysis(returns_df, precomputed_rolling_returns):
         plt.show()
 
 def load_generated_returns(asset_name):
-    load_dir = '../generated_GAN_output'
+    load_dir = 'generated_GAN_output'
     file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_final_scenarios.pt')
     gen_returns = torch.load(file_path)
 
@@ -226,6 +227,9 @@ def extensive_plotting(scaled, returns_df):
     plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled)
     plot_distributions_with_mode_collapse_check(returns_df, precomputed_rolling_returns)
     extreme_value_analysis(returns_df, precomputed_rolling_returns)
+
+
+# I want plots for each asset to appear in a grid.
 
 # Try to get wasserstein distance plot !!!
 

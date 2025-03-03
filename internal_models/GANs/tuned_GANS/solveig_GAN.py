@@ -14,7 +14,9 @@ class SolveigGAN:
     def __init__(self, returns_df, asset_name):
         self.returns_df = returns_df
         self.asset_name = asset_name
-        os.makedirs(f"generated_returns_{self.asset_name}", exist_ok=True)
+        
+        dir_path = os.path.join('generated_GAN_output', f"generated_returns_{self.asset_name}")
+        os.makedirs(dir_path, exist_ok=True)
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--n_epochs", type=int, default=1500, help="number of epochs of training")
@@ -129,7 +131,7 @@ class SolveigGAN:
                 all_generated_returns.append(gen_returns)
 
         all_generated_returns = np.vstack(all_generated_returns)
-        save_dir = "../../../generated_GAN_output"
+        save_dir = "generated_GAN_output"
         os.makedirs(save_dir, exist_ok=True)
 
         # Save the tensor in the specified directory
