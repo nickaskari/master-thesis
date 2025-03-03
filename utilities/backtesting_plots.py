@@ -16,7 +16,11 @@ def backtest_var_single_asset(test_returns, generated_returns, asset_name, confi
     - generated_returns (array-like): Simulated/generated returns for the asset.
     - asset_name (str): The asset name.
     - confidence_level (float): The confidence level for VaR (default 99.5%).
-    
+
+    Returns:
+    - failures (np.array): Binary sequence where 1 represents a VaR exception (failure) 
+                           and 0 represents no failure.
+
     Outputs:
     - Time-series plot of test returns with VaR overlay and failures highlighted.
     - Summary of failures (how often actual losses exceed the VaR).
@@ -26,7 +30,7 @@ def backtest_var_single_asset(test_returns, generated_returns, asset_name, confi
     var_threshold = np.percentile(generated_returns.flatten(), 100 * (1 - confidence_level))
 
     # Identify failures (when actual test return < VaR)
-    failures = test_returns < var_threshold
+    failures = (test_returns < var_threshold).astype(int)  # Convert boolean to int (1 for failure, 0 otherwise)
     failure_count = failures.sum()
 
     # Plot test returns
@@ -37,7 +41,8 @@ def backtest_var_single_asset(test_returns, generated_returns, asset_name, confi
     plt.axhline(var_threshold, color="red", linestyle="dashed", linewidth=2, label=f"VaR {confidence_level * 100:.1f}%")
 
     # Highlight failures
-    plt.scatter(test_returns.index[failures], test_returns[failures], color="red", label="VaR Breach", marker="o", zorder=3)
+    plt.scatter(test_returns.index[failures == 1], test_returns[failures == 1], 
+                color="red", label="VaR Breach", marker="o", zorder=3)
 
     # Formatting
     plt.title(f"Backtesting VaR for {asset_name} (99.5%)", fontsize=14)
@@ -52,3 +57,5 @@ def backtest_var_single_asset(test_returns, generated_returns, asset_name, confi
     print(f"\n📊 VaR Backtesting Summary for {asset_name}:")
     print(f"VaR {confidence_level * 100:.1f}% threshold: {var_threshold:.6f}")
     print(f"Failures (breaches below VaR): {failure_count} times")
+
+    return failures
