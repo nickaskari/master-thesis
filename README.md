@@ -28,7 +28,9 @@ pip install -r requirements.txt
 ```
 
 TODO:
-1. Fix Json saving and loading
-2. Run the GANS, double check plots
-3. Add Wasserstein plots
-4. Fix backtesting
+1. Add some more tests for backtesting, i.e. testing the distribution itself.
+2. Testing the other models, and putting them in one systemized visiualization
+3. Combing the GANs with copulas
+4. Add Multivariate GAN to the testing framework
+5. Try to improve the individual GANs a little
+6. Move on to Conditional GANs

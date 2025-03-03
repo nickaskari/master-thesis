@@ -3,11 +3,25 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 
+import numpy as np
+
+def calculate_var_threshold(generated_returns, confidence_level=0.995):
+
+    generated_returns = np.nan_to_num(generated_returns, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if np.all(generated_returns == 0):  # If all values are 0, VaR should be 0
+        return 0.0
+
+    var_threshold = np.percentile(generated_returns.flatten(), 100 * (1 - confidence_level))
+
+    return var_threshold
+
+
 # Plotting Forcasted Distribution Against Test
 
 def backtest_var_single_asset(test_returns, generated_returns, asset_name, confidence_level=0.995):
     
-    var_threshold = np.percentile(generated_returns.flatten(), 100 * (1 - confidence_level))
+    var_threshold = calculate_var_threshold(generated_returns, confidence_level)
 
     failures = (test_returns < var_threshold).astype(int)  # Convert boolean to int (1 for failure, 0 otherwise)
     failure_count = failures.sum()
