@@ -31,7 +31,7 @@ def save_results(model_name, distribution, scr, weights, overwrite=False):
         "distribution": distribution,
         "scr": scr,
         "title": model_name,
-        "weightsw": weights,
+        "weights": weights,
         "asset_liability_ratio": float(os.getenv("FRAC_LIABILITIES", 1.0))  # Default to 1.0 if env var is missing
     }
 
