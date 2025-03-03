@@ -18,9 +18,9 @@ def perform_var_backtesting_tests(failures, asset_name):
         result_pof = "❌ Failed (p < 0.05) - VaR model may be misspecified ⚠️"
 
     if p_ind > significance_level:
-        result_ind = "✅ Passed (p > 0.05) - No clustering of VaR breaches 🎉"
+        result_ind = f"✅ Passed (p > {significance_level}) - No clustering of VaR breaches 🎉"
     else:
-        result_ind = "❌ Failed (p < 0.05) - VaR breaches are clustered ⚠️"
+        result_ind = f"❌ Failed (p < {significance_level}) - VaR breaches are clustered ⚠️"
 
     print("\n" + "=" * 50)
     print(f"📊 VaR Backtesting Results for {asset_name}")
