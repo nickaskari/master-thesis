@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.stats as stats
 
+# This is unconcditional
 def kupiec_pof_test(failures):
     """
     Parameters:
