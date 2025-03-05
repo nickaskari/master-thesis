@@ -28,6 +28,7 @@ pip install -r requirements.txt
 ```
 
 TODO:
+
 2. Testing the other models, and putting them in one systemized visiualization
   - Make less verbose, like a nice table or something
 3. Combing the GANs with copulas
