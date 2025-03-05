@@ -1,9 +1,9 @@
 import numpy as np
 from scipy import stats
-from backtesting.kupiec_test import kupiec_pof_test
-from backtesting.christoffersens_test import christoffersen_independence_test
-from backtesting.lopez_loss import lopez_average_loss
-from backtesting.conditional_coverage import christoffersen_conditional_coverage_test
+from backtesting.var_tests.kupiec_test import kupiec_pof_test
+from backtesting.var_tests.christoffersens_test import christoffersen_independence_test
+from backtesting.var_tests.lopez_loss import lopez_average_loss
+from backtesting.var_tests.conditional_coverage import christoffersen_conditional_coverage_test
 import os
 from dotenv.main import load_dotenv
 load_dotenv(override=True)

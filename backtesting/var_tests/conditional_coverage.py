@@ -1,6 +1,6 @@
-from backtesting.christoffersens_test import christoffersen_independence_test
-from backtesting.kupiec_test import kupiec_pof_test
 from scipy.stats import chi2
+from backtesting.var_tests.christoffersens_test import christoffersen_independence_test
+from backtesting.var_tests.kupiec_test import kupiec_pof_test
 
 def christoffersen_conditional_coverage_test(failures):
     """

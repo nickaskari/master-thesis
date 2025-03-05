@@ -132,6 +132,7 @@ def display_statistics(stats_list):
     stats_df = pd.DataFrame(stats_list)
     print("\n📊 Return Statistics Summary:")
     print(stats_df.to_string(index=False))  # Pretty prints the table
+    
 
 def plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled=True, bins=500, cols=3):
     asset_names = returns_df.columns
