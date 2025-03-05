@@ -28,8 +28,8 @@ pip install -r requirements.txt
 ```
 
 TODO:
-1. Add some more tests for backtesting, i.e. testing the distribution itself.
 2. Testing the other models, and putting them in one systemized visiualization
+  - Make less verbose, like a nice table or something
 3. Combing the GANs with copulas
 4. Add Multivariate GAN to the testing framework
 5. Try to improve the individual GANs a little
