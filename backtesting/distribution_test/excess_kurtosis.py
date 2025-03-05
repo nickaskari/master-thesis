@@ -3,8 +3,8 @@ from scipy.stats import kurtosis
 
 def assess_fat_tails(generated_returns, empirical_returns_rolling):
     """
-    Assess the stylized fact of fat tails by comparing the excess kurtosis of GAN-generated 
-    one-year ahead return distributions to that of empirical rolling one-year returns.
+    Assess the stylized fact of fat tails by comparing the overall excess kurtosis of 
+    GAN-generated one-year ahead return distributions to that of empirical rolling one-year returns.
     
     Parameters
     ----------
@@ -17,48 +17,38 @@ def assess_fat_tails(generated_returns, empirical_returns_rolling):
     -------
     result : dict
         A dictionary containing:
-          - mean_generated_excess_kurtosis: Average excess kurtosis across generated scenarios.
-          - mean_empirical_excess_kurtosis: Average excess kurtosis across empirical windows.
+          - generated_excess_kurtosis: Overall excess kurtosis for the generated data.
+          - empirical_excess_kurtosis: Overall excess kurtosis for the empirical data.
           - difference: Difference (generated minus empirical).
-          - generated_excess_kurtosis_list: Excess kurtosis for each GAN scenario.
-          - empirical_excess_kurtosis_list: Excess kurtosis for each empirical window.
+          - interpretation: Text interpretation of the difference.
     """
-
-    gen_returns = np.array(generated_returns)
-    emp_returns = np.array(empirical_returns_rolling)
+    # Flatten the arrays to compute overall distribution moments.
+    gen_flat = np.array(generated_returns).flatten()
+    emp_flat = np.array(empirical_returns_rolling).flatten()
     
-    # fisher=True gives excess kurtosis (i.e. normal => 0), and bias=False uses an unbiased estimator.
-    gen_excess_kurtosis = kurtosis(gen_returns, fisher=True, bias=False, axis=1)
-    emp_excess_kurtosis = kurtosis(emp_returns, fisher=True, bias=False, axis=1)
+    # Compute overall excess kurtosis. With fisher=True, a normal distribution has 0 excess kurtosis.
+    generated_excess_kurtosis = kurtosis(gen_flat, fisher=True, bias=False)
+    empirical_excess_kurtosis = kurtosis(emp_flat, fisher=True, bias=False)
     
-    mean_gen_kurt = np.mean(gen_excess_kurtosis)
-    mean_emp_kurt = np.mean(emp_excess_kurtosis)
-    diff = mean_gen_kurt - mean_emp_kurt
+    diff = generated_excess_kurtosis - empirical_excess_kurtosis
     
-    print("Mean Generated Excess Kurtosis:", mean_gen_kurt)
-    print("Mean Empirical Excess Kurtosis:", mean_emp_kurt)
+    print("Overall Mean Generated Excess Kurtosis:", generated_excess_kurtosis)
+    print("Overall Mean Empirical Excess Kurtosis:", empirical_excess_kurtosis)
     print("Difference (Generated - Empirical):", diff)
     
-    # Interpretation (using a rough benchmark):
-    # Empirical daily returns typically have excess kurtosis in the range of 4-8 (when aggregated to a 
-    # yearly scale the value might change, so use your domain knowledge).
+    # Interpretation (using rough benchmarks - adjust based on your domain knowledge):
     if np.abs(diff) < 1:
-        interpretation = ("The proposed distributions are close to the empirical benchmark "
-                          "in terms of tail heaviness.")
+        interpretation = ("The generated distribution's tail heaviness is close to the empirical benchmark.")
     elif diff > 1:
-        interpretation = ("The proposed distributions exhibit significantly heavier tails than "
-                          "the empirical data.")
+        interpretation = ("The generated distribution exhibits significantly heavier tails than the empirical data.")
     else:
-        interpretation = ("The proposed distributions exhibit significantly lighter tails than "
-                          "the empirical data.")
+        interpretation = ("The generated distribution exhibits significantly lighter tails than the empirical data.")
     print("Interpretation:", interpretation)
     
     result = {
-        "mean_generated_excess_kurtosis": mean_gen_kurt,
-        "mean_empirical_excess_kurtosis": mean_emp_kurt,
+        "generated_excess_kurtosis": generated_excess_kurtosis,
+        "empirical_excess_kurtosis": empirical_excess_kurtosis,
         "difference": diff,
-        "generated_excess_kurtosis_list": gen_excess_kurtosis,
-        "empirical_excess_kurtosis_list": emp_excess_kurtosis,
         "interpretation": interpretation
     }
     

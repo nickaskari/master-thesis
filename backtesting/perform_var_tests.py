@@ -6,6 +6,7 @@ from backtesting.var_tests.lopez_loss import lopez_average_loss
 from backtesting.var_tests.conditional_coverage import christoffersen_conditional_coverage_test
 import os
 from dotenv.main import load_dotenv
+from utilities.backtesting_plots import calculate_var_threshold
 load_dotenv(override=True)
 
 
@@ -31,7 +32,7 @@ WEBSITE: https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=CELEX:02009L0138-20
 
 import os
 
-def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name):
+def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, generated_returns):
     """
     Runs a series of backtesting tests for a given VaR model:
       - Kupiec POF test (failure frequency)
@@ -49,6 +50,7 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name):
         Either a single VaR value for all days or an array of VaR forecasts for each day.
     asset_name : str
         The name of the asset for display purposes.
+    generated_returns: some array
 
     Returns:
     --------
@@ -57,6 +59,9 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name):
         as well as the computed Lopez average loss.
     """
     significance_level = float(os.getenv("SIGNIFICANCE_LEVEL", "0.05"))
+
+    if var_forecast == None:
+        var_forecast = [calculate_var_threshold(generated_returns)]
 
     LR_pof, p_pof = kupiec_pof_test(failures)
     LR_ind, p_ind = christoffersen_independence_test(failures)
@@ -80,9 +85,9 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name):
     else:
         result_joint = f"❌ Failed (p < {significance_level}) - Joint test indicates model misspecification ⚠️"
 
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 150)
     print(f"📊 VaR Backtesting Results for {asset_name}")
-    print("=" * 50)
+    print("=" * 150)
 
     print("\n🔍 Kupiec Proportion of Failures (POF) Test")
     print(f"📝 Likelihood Ratio (LR_pof): {LR_pof:.4f}")
@@ -103,7 +108,7 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name):
     print(f"📝 Average Lopez Loss: {avg_lopez_loss:.6f}")
     print("🚦 Lower values indicate fewer or less severe violations.")
 
-    print("=" * 50, "\n")
+    print("=" * 150, "\n")
 
     return {
         "LR_pof": LR_pof,

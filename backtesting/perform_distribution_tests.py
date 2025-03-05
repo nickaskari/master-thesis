@@ -7,7 +7,7 @@ from backtesting.distribution_test.quantile_quantile_plot import qq_plot
 import torch
 
 
-def perform_distribution_tests(generated_tensor, empirical_returns_rolling, asset_name="Asset"):
+def perform_distribution_tests(generated_returns, empirical_returns_rolling, asset_name="Asset"):
     """
     Perform a suite of distribution tests and visualizations on a given asset.
     
@@ -31,33 +31,29 @@ def perform_distribution_tests(generated_tensor, empirical_returns_rolling, asse
     significance_level = float(os.getenv("SIGNIFICANCE_LEVEL", "0.05"))
     
     # Convert generated_tensor to numpy if it is a torch tensor.
-    if isinstance(generated_tensor, torch.Tensor):
-        generated_array = generated_tensor.cpu().numpy()  # shape: (10000, 252)
+    if isinstance(generated_returns, torch.Tensor):
+        generated_array = generated_returns.cpu().numpy()  # shape: (10000, 252)
     else:
-        generated_array = np.array(generated_tensor)
+        generated_array = np.array(generated_returns)
     
     # Flatten both distributions to obtain overall 1D arrays.
     generated_flat = generated_array.flatten()
     empirical_flat = np.array(empirical_returns_rolling).flatten()
     
-    # Compute moments for generated distribution:
     gen_mean = np.mean(generated_flat)
     gen_std = np.std(generated_flat, ddof=1)
     gen_skew = np.mean((generated_flat - gen_mean)**3) / (gen_std**3)
-    gen_excess_kurt = kurtosis(generated_flat, fisher=True, bias=False)
     
-    # Compute moments for empirical distribution:
     emp_mean = np.mean(empirical_flat)
     emp_std = np.std(empirical_flat, ddof=1)
     emp_skew = np.mean((empirical_flat - emp_mean)**3) / (emp_std**3)
-    emp_excess_kurt = kurtosis(empirical_flat, fisher=True, bias=False)
     
-    print("="*50)
+    print("="*150)
     print(f"Distribution Tests for {asset_name}")
-    print("="*50)
+    print("="*150)
     print("Overall Moments Comparison:")
-    print(f"Generated -> Mean: {gen_mean:.4f}, Std: {gen_std:.4f}, Skewness: {gen_skew:.4f}, Excess Kurtosis: {gen_excess_kurt:.4f}")
-    print(f"Empirical -> Mean: {emp_mean:.4f}, Std: {emp_std:.4f}, Skewness: {emp_skew:.4f}, Excess Kurtosis: {emp_excess_kurt:.4f}")
+    print(f"Generated -> Mean: {gen_mean:.4f}, Std: {gen_std:.4f}, Skewness: {gen_skew:.4f}")
+    print(f"Empirical -> Mean: {emp_mean:.4f}, Std: {emp_std:.4f}, Skewness: {emp_skew:.4f}")
     
     # Perform skewtest on generated distribution:
     skew_stat, skew_pvalue = skewtest(generated_flat)
@@ -81,11 +77,11 @@ def perform_distribution_tests(generated_tensor, empirical_returns_rolling, asse
     results = {
         "asset_name": asset_name,
         "significance_level": significance_level,
-        "generated_moments": {"mean": gen_mean, "std": gen_std, "skewness": gen_skew, "excess_kurtosis": gen_excess_kurt},
-        "empirical_moments": {"mean": emp_mean, "std": emp_std, "skewness": emp_skew, "excess_kurtosis": emp_excess_kurt},
+        "generated_moments": {"mean": gen_mean, "std": gen_std, "skewness": gen_skew},
+        "empirical_moments": {"mean": emp_mean, "std": emp_std, "skewness": emp_skew},
         "skewtest": {"statistic": skew_stat, "p_value": skew_pvalue, "interpretation": skew_interpretation},
         "fat_tail_assessment": fat_tail_results
     }
     
-    print("="*50)
+    print("="*150)
     return results
