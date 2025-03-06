@@ -10,6 +10,3 @@
 # Ignore all pycache folders from all subfolders
 **/__pycache__/
 **/*.py[cod]
-
-/pymoo
-.pymoo
