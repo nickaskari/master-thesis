@@ -32,7 +32,7 @@ WEBSITE: https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=CELEX:02009L0138-20
 
 import os
 
-def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, generated_returns, verbose=True):
+def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, generated_returns, verbose=True, portfolio=False, weights=None, bof=None):
     """
     Runs a series of backtesting tests for a given VaR model:
       - Kupiec POF test (failure frequency)
@@ -68,7 +68,10 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, g
 
     LR_joint, p_joint = christoffersen_conditional_coverage_test(failures)
 
-    avg_lopez_loss = lopez_average_loss(returns, var_forecast)
+    if portfolio:
+        avg_lopez_loss = lopez_average_loss(bof, var_forecast)
+    else:
+        avg_lopez_loss = lopez_average_loss(returns, var_forecast)
 
     if p_pof > significance_level:
         result_pof = f"✅ Passed (p > {significance_level}) - No significant failure pattern detected 🎉"

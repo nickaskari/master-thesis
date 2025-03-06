@@ -66,10 +66,8 @@ def backtest_var_bof_value(
     """
 
     eonia = test_returns.iloc[:, -1]
-    asset_return_cols = test_returns.columns[:-1]
-    asset_returns = test_returns[asset_return_cols]
 
-    portfolio_returns = (asset_returns * weights).sum(axis=1)
+    portfolio_returns = (test_returns * weights).sum(axis=1)
     
     portfolio_value = assets_0 * (1 + portfolio_returns).cumprod()
     
@@ -106,4 +104,4 @@ def backtest_var_bof_value(
         print(f"• VaR Threshold (Level): {var_threshold:.6f}")
         print(f"• Failures (BOF below VaR): {failure_count} times")
     
-    return failures
+    return failures, bof

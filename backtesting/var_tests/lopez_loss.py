@@ -45,6 +45,7 @@ def lopez_average_loss(returns, var_forecast):
     
     L = np.zeros(n)
     mask = returns < var_forecast_full
+
     L[mask] = 1 + ((returns[mask] - var_forecast_full[mask])**2) / (var_forecast_full[mask]**2)
     
     avg_loss = L.mean()

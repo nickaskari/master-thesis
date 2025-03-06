@@ -10,7 +10,8 @@ def run_all_tests_on_models(
         test_returns,
         weights,
         assets_0,
-        liabilities_0):
+        liabilities_0,
+        verbose=False):
     """
     models: a dictionary (model_name, distribution)
     empirical_returns_rolling: your rolling empirical data
@@ -28,7 +29,7 @@ def run_all_tests_on_models(
         )
         '''
 
-        failures = backtest_var_bof_value(model_name, test_returns, dist, weights, assets_0, liabilities_0, confidence_level=0.995,verbose=False)
+        failures, bof = backtest_var_bof_value(model_name, test_returns, dist, weights, assets_0, liabilities_0, confidence_level=0.995,verbose=verbose)
 
         var_results = perform_var_backtesting_tests(
             failures=failures, 
@@ -36,7 +37,10 @@ def run_all_tests_on_models(
             var_forecast=[calculate_var_threshold(dist)], 
             asset_name=model_name, 
             generated_returns=dist, 
-            verbose=False  
+            verbose=False,
+            portfolio=True,
+            weights=weights,
+            bof=bof
         )
 
         combined_results = {
@@ -48,4 +52,4 @@ def run_all_tests_on_models(
 
     results_df = pd.DataFrame(results_list)
 
-    return results_df
+    return results_df.style.hide()
