@@ -32,7 +32,7 @@ WEBSITE: https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=CELEX:02009L0138-20
 
 import os
 
-def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, generated_returns):
+def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, generated_returns, verbose=True):
     """
     Runs a series of backtesting tests for a given VaR model:
       - Kupiec POF test (failure frequency)
@@ -85,30 +85,31 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, g
     else:
         result_joint = f"❌ Failed (p < {significance_level}) - Joint test indicates model misspecification ⚠️"
 
-    print("\n" + "=" * 150)
-    print(f"📊 VaR Backtesting Results for {asset_name}")
-    print("=" * 150)
+    if verbose:
+        print("\n" + "=" * 150)
+        print(f"📊 VaR Backtesting Results for {asset_name}")
+        print("=" * 150)
 
-    print("\n🔍 Kupiec Proportion of Failures (POF) Test")
-    print(f"📝 Likelihood Ratio (LR_pof): {LR_pof:.4f}")
-    print(f"📊 p-value: {p_pof:.6f}")
-    print(f"🚦 Test Conclusion: {result_pof}")
+        print("\n🔍 Kupiec Proportion of Failures (POF) Test")
+        print(f"📝 Likelihood Ratio (LR_pof): {LR_pof:.4f}")
+        print(f"📊 p-value: {p_pof:.6f}")
+        print(f"🚦 Test Conclusion: {result_pof}")
 
-    print("\n🔍 Christoffersen Independence Test")
-    print(f"📝 Likelihood Ratio (LR_ind): {LR_ind:.4f}")
-    print(f"📊 p-value: {p_ind:.6f}")
-    print(f"🚦 Test Conclusion: {result_ind}")
+        print("\n🔍 Christoffersen Independence Test")
+        print(f"📝 Likelihood Ratio (LR_ind): {LR_ind:.4f}")
+        print(f"📊 p-value: {p_ind:.6f}")
+        print(f"🚦 Test Conclusion: {result_ind}")
 
-    print("\n🔍 Joint (Conditional Coverage) Test")
-    print(f"📝 Joint Likelihood Ratio (LR_joint): {LR_joint:.4f}")
-    print(f"📊 p-value: {p_joint:.6f}")
-    print(f"🚦 Test Conclusion: {result_joint}")
+        print("\n🔍 Joint (Conditional Coverage) Test")
+        print(f"📝 Joint Likelihood Ratio (LR_joint): {LR_joint:.4f}")
+        print(f"📊 p-value: {p_joint:.6f}")
+        print(f"🚦 Test Conclusion: {result_joint}")
 
-    print("\n🔍 Lopez Average Loss")
-    print(f"📝 Average Lopez Loss: {avg_lopez_loss:.6f}")
-    print("🚦 Lower values indicate fewer or less severe violations.")
+        print("\n🔍 Lopez Average Loss")
+        print(f"📝 Average Lopez Loss: {avg_lopez_loss:.6f}")
+        print("🚦 Lower values indicate fewer or less severe violations.")
 
-    print("=" * 150, "\n")
+        print("=" * 150, "\n")
 
     return {
         "LR_pof": LR_pof,

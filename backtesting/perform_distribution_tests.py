@@ -7,7 +7,7 @@ from backtesting.distribution_test.quantile_quantile_plot import qq_plot
 import torch
 
 
-def perform_distribution_tests(generated_returns, empirical_returns_rolling, asset_name="Asset"):
+def perform_distribution_tests(generated_returns, empirical_returns_rolling, asset_name, verbose=True):
     """
     Perform a suite of distribution tests and visualizations on a given asset.
     
@@ -48,30 +48,34 @@ def perform_distribution_tests(generated_returns, empirical_returns_rolling, ass
     emp_std = np.std(empirical_flat, ddof=1)
     emp_skew = np.mean((empirical_flat - emp_mean)**3) / (emp_std**3)
     
-    print("="*150)
-    print(f"Distribution Tests for {asset_name}")
-    print("="*150)
-    print("Overall Moments Comparison:")
-    print(f"Generated -> Mean: {gen_mean:.4f}, Std: {gen_std:.4f}, Skewness: {gen_skew:.4f}")
-    print(f"Empirical -> Mean: {emp_mean:.4f}, Std: {emp_std:.4f}, Skewness: {emp_skew:.4f}")
+    if verbose:
+      print("="*150)
+      print(f"Distribution Tests for {asset_name}")
+      print("="*150)
+      print("Overall Moments Comparison:")
+      print(f"Generated -> Mean: {gen_mean:.4f}, Std: {gen_std:.4f}, Skewness: {gen_skew:.4f}")
+      print(f"Empirical -> Mean: {emp_mean:.4f}, Std: {emp_std:.4f}, Skewness: {emp_skew:.4f}")
     
     # Perform skewtest on generated distribution:
     skew_stat, skew_pvalue = skewtest(generated_flat)
-    print("\nSkewness Test on Generated Data:")
-    print(f"Test Statistic: {skew_stat:.4f}")
-    print(f"p-value: {skew_pvalue:.4f}")
-    if skew_pvalue < significance_level:
-        skew_interpretation = "Significant skewness detected (distribution is asymmetric)."
-    else:
-        skew_interpretation = "No significant skewness detected (cannot reject symmetry)."
-    print("Skewness Interpretation:", skew_interpretation)
+    if verbose:
+      print("\nSkewness Test on Generated Data:")
+      print(f"Test Statistic: {skew_stat:.4f}")
+      print(f"p-value: {skew_pvalue:.4f}")
+      if skew_pvalue < significance_level:
+          skew_interpretation = "Significant skewness detected (distribution is asymmetric)."
+      else:
+          skew_interpretation = "No significant skewness detected (cannot reject symmetry)."
+      print("Skewness Interpretation:", skew_interpretation)
     
-    # Create a Q-Q plot comparing the overall generated and empirical distributions.
-    print("\nGenerating Q-Q Plot comparing Generated vs. Empirical Distributions...")
+      # Create a Q-Q plot comparing the overall generated and empirical distributions.
+      print("\nGenerating Q-Q Plot comparing Generated vs. Empirical Distributions...")
+
     qq_plot(generated_flat, empirical_flat)
     
     # Assess fat tails using the rolling windows.
-    print("\nAssessing Fat Tails via Rolling Windows (Excess Kurtosis Comparison)...")
+    if verbose:
+      print("\nAssessing Fat Tails via Rolling Windows (Excess Kurtosis Comparison)...")
     fat_tail_results = assess_fat_tails(generated_array, empirical_returns_rolling)
     
     results = {
@@ -83,5 +87,6 @@ def perform_distribution_tests(generated_returns, empirical_returns_rolling, ass
         "fat_tail_assessment": fat_tail_results
     }
     
-    print("="*150)
+    if verbose:
+      print("="*150)
     return results
