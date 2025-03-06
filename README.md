@@ -30,6 +30,8 @@ pip install -r requirements.txt
 TODO:
 
 Add standard formula
+
+
 3. Combing the GANs with copulas
 4. Add Multivariate GAN to the testing framework
 5. Try to improve the individual GANs a little
