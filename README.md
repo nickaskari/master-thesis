@@ -29,7 +29,9 @@ pip install -r requirements.txt
 
 TODO:
 
-Add standard formula
+
+Find out what in standard formula is time dependent.
+Does not have multi VaR capabilities as of now.
 
 
 3. Combing the GANs with copulas
