@@ -75,7 +75,10 @@ def backtest_var_bof_value(
     
     bof = portfolio_value - liabilities
 
-    var_threshold = calculate_var_threshold(generated_bof_levels, confidence_level)
+    if model_name == 'Standard Formula':
+        var_threshold = generated_bof_levels # Since the standard formula does not produce distribution, a VaR is passed instead.
+    else:
+        var_threshold = calculate_var_threshold(generated_bof_levels, confidence_level)
 
     failures = (bof < var_threshold).astype(int)
     failure_count = failures.sum()

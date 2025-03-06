@@ -2,12 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import pandas as pd
+import os
 
 def plot_bof_var(bof_change, scr, title, bof_0):
+    assets_0 = int(os.getenv("INIT_ASSETS"))
 
     bof_change = np.array(bof_change)
 
-    scr_percentage = (scr / bof_0) * 100  # Calculate SCR as % of BOF_0
+    scr_percentage = (scr / assets_0) * 100  # Calculate SCR as % of assets_0
     bof_change_millions = bof_change / 1e6  # Convert to millions
 
     plt.figure(figsize=(10, 6))

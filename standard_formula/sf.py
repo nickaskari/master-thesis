@@ -152,25 +152,6 @@ def calculate_market_scr(
     }
 
 
-asset_values = {
-    'global_equity': 1/7,
-    'other_equity': 1/7,
-    'real_estate': 1/7,
-    'gov_bonds': 1/7,
-    'IG_corp_bonds': 1/7,
-    'HY_corp_bonds': 1/7,
-    'money_market': 1/7
-}
-
-durations = {
-    'gov_bonds': 7.29,
-    'IG_corp_bonds': 5.90,
-    'HY_corp_bonds': 3.14
-}
-
-scr_results = calculate_market_scr(asset_values, durations)
-for key, value in scr_results.items():
-    print(f"{key}: {value:,.3f}")
 
 
 '''
