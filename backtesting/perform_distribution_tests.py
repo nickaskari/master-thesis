@@ -2,8 +2,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import kurtosis, skewtest
-from backtesting.distribution_test.excess_kurtosis import assess_fat_tails
-from backtesting.distribution_test.quantile_quantile_plot import qq_plot
+from backtesting.distribution_tests.excess_kurtosis import assess_fat_tails
+from backtesting.distribution_tests.quantile_quantile_plot import qq_plot
 import torch
 
 
