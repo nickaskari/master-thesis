@@ -40,3 +40,4 @@ Make a new benchmark metric --> distance from var line to corresponding point in
 
 5. Try to improve the individual GANs a little
 6. Move on to Conditional GANs
+7. Investingate qunantil NNs
