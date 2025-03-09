@@ -60,6 +60,9 @@ def check_mode_collapse(real_returns, generated_returns):
 
     # PCA Projection for real vs generated data
     pca = PCA(n_components=2)
+    print("Real returns shape", real_returns.shape)
+    print("genereated returns shape", generated_returns.shape)
+    
     real_pca = pca.fit_transform(real_returns)
     gen_pca = pca.transform(generated_returns)
 
@@ -340,7 +343,7 @@ def extensive_plotting(scaled, returns_df):
     
   
     # Call functions using precomputed returns
-    plot_histogram_distributions(returns_df,precomputed_rolling_returns, scaled, bins=500, cols=3)
+    plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled, bins=500, cols=3)
 
     print("\n" + "=" * 50 + "\n")  
 

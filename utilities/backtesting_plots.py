@@ -75,6 +75,10 @@ def backtest_var_bof_value(
     
     bof = portfolio_value - liabilities
 
+    bof_0 = assets_0 - liabilities_0
+
+    bof = bof - bof_0 # Delta BOF
+
     if model_name == 'Standard Formula':
         var_threshold = generated_bof_levels # Since the standard formula does not produce distribution, a VaR is passed instead.
     else:
@@ -96,7 +100,7 @@ def backtest_var_bof_value(
         
         plt.title(f"Backtesting VaR for {model_name} (Level-based)", fontsize=14)
         plt.xlabel("Date")
-        plt.ylabel("BOF Level")
+        plt.ylabel(r"$\Delta$ BOF")
         plt.legend()
         plt.grid(False)
         plt.tight_layout()
