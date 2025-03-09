@@ -34,11 +34,8 @@ Find out what in standard formula is time dependent.
 
 Does not have multi VaR capabilities as of now.
 
-What makes the GAN overly conservetive?
+What makes the GAN overly conservetive? - possibly EONIA?
 
-Make a new benchmark metric --> distance from var line to corresponding point in test
-
-Test out a normal copula GAN
 
 5. Try to improve the individual GANs a little
 6. Move on to Conditional GANs
