@@ -36,6 +36,8 @@ Does not have multi VaR capabilities as of now.
 
 What makes the GAN overly conservetive? - possibly EONIA?
 
+Explainability --> analyse the latent space
+
 
 5. Try to improve the individual GANs a little
 6. Move on to Conditional GANs
