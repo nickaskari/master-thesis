@@ -4,6 +4,7 @@ from backtesting.var_tests.kupiec_test import kupiec_pof_test
 from backtesting.var_tests.christoffersens_test import christoffersen_independence_test
 from backtesting.var_tests.lopez_loss import lopez_average_loss
 from backtesting.var_tests.conditional_coverage import christoffersen_conditional_coverage_test
+from backtesting.var_tests.balanced_scr_loss import balanced_scr_loss
 import os
 from dotenv.main import load_dotenv
 from utilities.backtesting_plots import calculate_var_threshold
@@ -70,8 +71,11 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, g
 
     if portfolio:
         avg_lopez_loss = lopez_average_loss(bof, var_forecast)
+        balanced_loss = balanced_scr_loss(bof, var_forecast)
     else:
         avg_lopez_loss = lopez_average_loss(returns, var_forecast)
+        balanced_loss = None
+
 
     if p_pof > significance_level:
         result_pof = f"✅ Passed (p > {significance_level}) - No significant failure pattern detected 🎉"
@@ -112,6 +116,10 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, g
         print(f"📝 Average Lopez Loss: {avg_lopez_loss:.6f}")
         print("🚦 Lower values indicate fewer or less severe violations.")
 
+        print("\n🔍 Balanced SCR Loss")
+        print(f"📝 Loss: {avg_lopez_loss:.6f}")
+        print("🚦 A higher value is worse.")
+
         print("=" * 150, "\n")
 
     return {
@@ -124,5 +132,6 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, g
         "LR_joint": LR_joint,
         "p_value_joint": p_joint,
         "result_joint": result_joint,
-        "avg_lopez_loss": avg_lopez_loss
+        "avg_lopez_loss": avg_lopez_loss,
+        "balanced_scr_loss" : balanced_loss
     }
