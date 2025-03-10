@@ -60,8 +60,6 @@ def check_mode_collapse(real_returns, generated_returns):
 
     # PCA Projection for real vs generated data
     pca = PCA(n_components=2)
-    print("Real returns shape", real_returns.shape)
-    print("genereated returns shape", generated_returns.shape)
     
     real_pca = pca.fit_transform(real_returns)
     gen_pca = pca.transform(generated_returns)
@@ -153,7 +151,6 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled
 
         # Load the generated returns
         gen_returns = load_generated_returns(asset_name).cpu().detach().numpy()
-        print("1 genreturns shape,", gen_returns.shape)
 
         # Handle NaNs in generated returns
         if np.isnan(gen_returns).any() or np.isinf(gen_returns).any():
@@ -167,8 +164,6 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled
         min_length = min(len(empirical_returns.flatten()), len(gen_returns.flatten()))
         real_data = empirical_returns.flatten()[:min_length]
         generated_data = gen_returns.flatten()[:min_length]
-
-        print("2 genereated data shape and length", generated_data.shape, len(generated_data))
 
         # Scaling
         if scaled:

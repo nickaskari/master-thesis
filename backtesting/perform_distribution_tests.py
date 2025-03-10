@@ -2,7 +2,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import kurtosis, skewtest
-from backtesting.distribution_tests.pca_plot import pca_plot
 from backtesting.distribution_tests.excess_kurtosis import assess_fat_tails
 from backtesting.distribution_tests.quantile_quantile_plot import qq_plot
 import torch
@@ -53,8 +52,6 @@ def perform_distribution_tests(generated_returns, empirical_returns_rolling, ass
         print(f"Generated -> Mean: {gen_mean:.4f}, Std: {gen_std:.4f}, Skewness: {gen_skew:.4f}")
         print(f"Empirical -> Mean: {emp_mean:.4f}, Std: {emp_std:.4f}, Skewness: {emp_skew:.4f}")
     
-    # Perform skewtest on generated distribution.
-    from scipy.stats import skewtest
     skew_stat, skew_pvalue = skewtest(generated_flat)
     if skew_pvalue < significance_level:
         skew_interpretation = "Significant skewness detected (distribution is asymmetric)."
@@ -68,17 +65,6 @@ def perform_distribution_tests(generated_returns, empirical_returns_rolling, ass
         print("Skewness Interpretation:", skew_interpretation)
         print("\nGenerating Q-Q Plot comparing Generated vs. Empirical Distributions...")
     qq_plot(generated_flat, empirical_flat, bof=bof)
-    
-    # For BOF, perform PCA on flat data by reshaping to (-1, 1)
-    if bof:
-        # Call the PCA plotting function (which should be defined elsewhere)
-        print("empirical returns rolling shape", empirical_returns_rolling.shape)
-        explained_variance = pca_plot(empirical_returns_rolling, generated_returns, title=f"PCA of {asset_name} BOF: Empirical vs Generated")
-        pca_generated_pc1 = explained_variance[0]
-        pca_generated_pc2 = explained_variance[1] if explained_variance[1] is not None else None
-    else:
-        pca_generated_pc1 = None
-        pca_generated_pc2 = None
 
     if verbose:
         print("\nAssessing Fat Tails via Rolling Windows (Excess Kurtosis Comparison)...")
@@ -86,7 +72,6 @@ def perform_distribution_tests(generated_returns, empirical_returns_rolling, ass
     
     # Create a flat dictionary with all results.
     results = {
-        "asset_name": asset_name,
         "significance_level": significance_level,
         "gen_mean": gen_mean,
         "gen_std": gen_std,
@@ -96,9 +81,7 @@ def perform_distribution_tests(generated_returns, empirical_returns_rolling, ass
         "emp_skew": emp_skew,
         "skew_stat": skew_stat,
         "skew_pvalue": skew_pvalue,
-        "skew_interpretation": skew_interpretation,
-        "pca_generated_pc1": pca_generated_pc1,
-        "pca_generated_pc2": pca_generated_pc2,
+        "skew_interpretation": skew_interpretation
     }
     
     # Flatten fat tail results into the dictionary.

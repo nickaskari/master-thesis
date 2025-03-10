@@ -3,7 +3,7 @@ from backtesting.perform_distribution_tests import perform_distribution_tests
 from backtesting.perform_var_tests import perform_var_backtesting_tests
 from utilities.backtesting_plots import backtest_var_bof_value, calculate_var_threshold
 from utilities.gan_plotting import create_rolling_empirical
-
+import numpy as np
 # Make support for multi VaR
 
 def get_empirical_delta_bof(returns_df, weights, assets_0, liabilities_0):
@@ -32,6 +32,8 @@ def run_all_tests_on_models(
     results_list_dist = []
 
     empirical_delta_bof = get_empirical_delta_bof(train_returns, weights, assets_0, liabilities_0)
+    rolling_windows = create_rolling_empirical(empirical_delta_bof, window_size=252)
+    plot_rolling_windows_distribution(rolling_windows, num_windows=10)
 
     for model_name, dist in models.items():
         print_model_box(model_name)
@@ -86,3 +88,30 @@ def print_model_box(model_name):
     print(empty_line)
     print(border)
 
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+def plot_rolling_windows_distribution(rolling_data, num_windows=10):
+    """
+    Plot density curves for a subset of rolling windows.
+    
+    Parameters:
+      rolling_data: 2D array of shape (n_windows, window_size).
+      num_windows: Number of windows to sample and plot.
+    """
+    n_windows = rolling_data.shape[0]
+    # Choose indices evenly spaced across the windows.
+    indices = np.linspace(0, n_windows - 1, num_windows, dtype=int)
+    
+    plt.figure(figsize=(10, 6))
+    for idx in indices:
+        window = rolling_data[idx]
+        # Plot the kernel density estimate for the window.
+        sns.kdeplot(window, label=f"Window {idx}", fill=False)
+    
+    plt.xlabel("Delta BOF")
+    plt.ylabel("Density")
+    plt.title("Density Estimates for Sampled Rolling Windows of Empirical Delta BOF")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
