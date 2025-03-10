@@ -92,10 +92,10 @@ def analyse_assets(returns_df, precomputed_rolling_returns, test):
         check_mode_collapse(empirical_returns, gen_returns)
 
         if asset_name != 'EONIA':
-            extreme_value_analysis(asset_name, precomputed_rolling_returns)
-            nearest_distance_histogram(asset_name, precomputed_rolling_returns)
+            extreme_value_analysis(asset_name, precomputed_rolling_returns, test)
+            nearest_distance_histogram(asset_name, precomputed_rolling_returns, test)
 
-        result = wasserstein_distance_analysis(asset_name, precomputed_rolling_returns)
+        result = wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test)
         results.append(result)
 
 
@@ -233,7 +233,7 @@ def extreme_value_analysis(asset_name, precomputed_rolling_returns, test):
     plt.grid(False)
     plt.show()
 
-def load_generated_returns(asset_name, test):
+def load_generated_returns(asset_name, test=False):
     if test:
         load_dir = 'generated_CGAN_output_test'
     else:
