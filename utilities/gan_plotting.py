@@ -71,7 +71,7 @@ def check_mode_collapse(real_returns, generated_returns):
     plt.title("PCA Projection of Real vs Generated Returns")
     plt.show()
 
-def analyse_assets(returns_df, precomputed_rolling_returns):
+def analyse_assets(returns_df, precomputed_rolling_returns, test):
     asset_names = returns_df.columns
 
     results = []
@@ -83,7 +83,7 @@ def analyse_assets(returns_df, precomputed_rolling_returns):
         print("═" * (len(title) + 4) + "\n")
 
         # Load the generated returns
-        gen_returns = load_generated_returns(asset_name)
+        gen_returns = load_generated_returns(asset_name, test)
         gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy()
 
         empirical_returns = precomputed_rolling_returns[asset_name]
@@ -135,7 +135,7 @@ def display_statistics(stats_list):
     print(stats_df.to_string(index=False))  # Pretty prints the table
     
 
-def plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled=True, bins=500, cols=3):
+def plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, scaled=True, bins=500, cols=3):
     asset_names = returns_df.columns
     num_assets = len(asset_names)
     
@@ -150,7 +150,7 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled
         ax = axes[idx]
 
         # Load the generated returns
-        gen_returns = load_generated_returns(asset_name).cpu().detach().numpy()
+        gen_returns = load_generated_returns(asset_name, test).cpu().detach().numpy()
 
         # Handle NaNs in generated returns
         if np.isnan(gen_returns).any() or np.isinf(gen_returns).any():
@@ -209,10 +209,10 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled
     display_statistics(stats_list)
 
 # ---------- EXTREME VALUE PLOT FUNCTION ---------- #
-def extreme_value_analysis(asset_name, precomputed_rolling_returns):
+def extreme_value_analysis(asset_name, precomputed_rolling_returns, test):
 
     # Load generated returns
-    gen_returns = load_generated_returns(asset_name)
+    gen_returns = load_generated_returns(asset_name, test)
     gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy().flatten()
     
     # Get real returns from precomputed data
@@ -233,14 +233,18 @@ def extreme_value_analysis(asset_name, precomputed_rolling_returns):
     plt.grid(False)
     plt.show()
 
-def load_generated_returns(asset_name):
-    load_dir = 'generated_GAN_output'
+def load_generated_returns(asset_name, test):
+    if test:
+        load_dir = 'generated_CGAN_output_test'
+    else:
+        load_dir = 'generated_GAN_output'
+
     file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_final_scenarios.pt')
     gen_returns = torch.load(file_path)
 
     return gen_returns
 
-def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns):
+def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test):
 
     title = f" COMPUTING WASSERSTEIN DISTANCE: {asset_name} "
     print("\n" + "═" * (len(title) + 4))
@@ -248,7 +252,7 @@ def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns):
     print("═" * (len(title) + 4) + "\n")
 
     # Load the generated returns
-    gen_returns = load_generated_returns(asset_name)
+    gen_returns = load_generated_returns(asset_name, test)
     gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy().flatten()
 
     # Retrieve precomputed empirical returns
@@ -281,14 +285,14 @@ def wasserstein_distance_plot(results):
     plt.tight_layout()
     plt.show()
 
-def nearest_distance_histogram(asset_name, precomputed_rolling_returns, bins=50):
+def nearest_distance_histogram(asset_name, precomputed_rolling_returns, test, bins=50):
     title = f" COMPUTING NEAREST DISTANCE HISTOGRAM: {asset_name} "
     print("\n" + "═" * (len(title) + 4))
     print(f"║{title.center(len(title) + 2)}║")
     print("═" * (len(title) + 4) + "\n")
 
     # Load generated returns
-    gen_returns = load_generated_returns(asset_name)
+    gen_returns = load_generated_returns(asset_name, test)
     gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy()
 
     # Retrieve empirical returns
@@ -333,19 +337,18 @@ def nearest_distance_histogram(asset_name, precomputed_rolling_returns, bins=50)
     plt.tight_layout()
     plt.show()
     
-def extensive_plotting(scaled, returns_df):
+def extensive_plotting(scaled, returns_df, test=False):
     precomputed_rolling_returns = {asset: create_rolling_empirical(returns_df[asset].values) for asset in returns_df.columns}
     
   
     # Call functions using precomputed returns
-    plot_histogram_distributions(returns_df, precomputed_rolling_returns, scaled, bins=500, cols=3)
+    plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, scaled, bins=500, cols=3)
 
     print("\n" + "=" * 50 + "\n")  
 
-    analyse_assets(returns_df, precomputed_rolling_returns)
+    analyse_assets(returns_df, precomputed_rolling_returns, test)
     #extreme_value_analysis(returns_df, precomputed_rolling_returns)
 
 
 
-# Try to get wasserstein distance plot !!!
 
