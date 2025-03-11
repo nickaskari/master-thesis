@@ -337,7 +337,7 @@ def nearest_distance_histogram(asset_name, precomputed_rolling_returns, test, bi
     plt.tight_layout()
     plt.show()
     
-def extensive_plotting(scaled, returns_df, test=False):
+def extensive_plotting(scaled, returns_df, test=False, quarterly=False):
     precomputed_rolling_returns = {asset: create_rolling_empirical(returns_df[asset].values) for asset in returns_df.columns}
     
   
@@ -346,7 +346,7 @@ def extensive_plotting(scaled, returns_df, test=False):
 
     print("\n" + "=" * 50 + "\n")  
 
-    analyse_assets(returns_df, precomputed_rolling_returns, test)
+    analyse_assets(returns_df, precomputed_rolling_returns, test, quarterly)
     #extreme_value_analysis(returns_df, precomputed_rolling_returns)
 
 
