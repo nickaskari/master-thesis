@@ -13,8 +13,9 @@ def update_condition_matrix(historical_returns, test_returns, quarter_length=63)
     ----------
     historical_returns : pd.Series or array-like
         Historical returns (used during training).
-    test_returns : array-like of shape (n_quarters, quarter_length)
-        Out-of-sample test returns organized by quarter.
+    test_returns : array-like
+        Out-of-sample test returns. This can be a pandas DataFrame/Series or a 1D array 
+        containing daily returns for the full out-of-sample period (e.g. 252 days).
     quarter_length : int, default=63
         Number of days that define a quarter.
     
@@ -22,7 +23,7 @@ def update_condition_matrix(historical_returns, test_returns, quarter_length=63)
     -------
     conditions : np.ndarray of shape (n_quarters+1, 1)
         The first row is the condition from the historical data (Q0), and each subsequent row is
-        the cumulative return for each quarter from test_returns.
+        the cumulative return for each quarter computed from test_returns.
     """
     # Ensure historical_returns is a pandas Series.
     if not isinstance(historical_returns, pd.Series):
@@ -34,8 +35,25 @@ def update_condition_matrix(historical_returns, test_returns, quarter_length=63)
     
     conditions = [cond_base]
     
-    # Ensure test_returns is a NumPy array.
+    # Convert test_returns to a NumPy array.
     test_returns = np.array(test_returns)
+    
+    # If test_returns is 1D, assume it contains daily returns and divide it into quarters.
+    if test_returns.ndim == 1:
+        total_days = len(test_returns)
+        n_quarters = total_days // quarter_length
+        # Truncate any extra days that don't form a complete quarter.
+        test_returns = test_returns[:n_quarters * quarter_length].reshape(n_quarters, quarter_length)
+    
+    # If test_returns is 2D but not of shape (n_quarters, quarter_length), try to handle it.
+    elif test_returns.ndim == 2:
+        if test_returns.shape[1] != quarter_length:
+            # If the number of rows is equal to quarter_length, assume the days are in rows and transpose.
+            if test_returns.shape[0] == quarter_length:
+                test_returns = test_returns.T
+            else:
+                # Otherwise, truncate columns if there are extra days.
+                test_returns = test_returns[:, :quarter_length]
     
     # For each quarter in test_returns, compute the cumulative return.
     for i in range(test_returns.shape[0]):
