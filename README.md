@@ -38,7 +38,8 @@ What makes the GAN overly conservetive? - possibly EONIA?
 
 Explainability --> analyse the latent space
 
-
-5. Try to improve the individual GANs a little
-6. Move on to Conditional GANs
-7. Investingate qunantil NNs
+1. Add Quartelrly support
+2. Make more Conditional GANS --> Equity
+3. Make CGAN for Bonds
+4. Make Multivarate CGAN and test
+7. Investingate qunantile NNs
