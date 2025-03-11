@@ -135,7 +135,7 @@ def display_statistics(stats_list):
     print(stats_df.to_string(index=False))  # Pretty prints the table
     
 
-def plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, scaled=True, bins=500, cols=3):
+def plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, quarterly,scaled=True, bins=500, cols=3):
     asset_names = returns_df.columns
     num_assets = len(asset_names)
     
@@ -150,7 +150,7 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, 
         ax = axes[idx]
 
         # Load the generated returns
-        gen_returns = load_generated_returns(asset_name, test).cpu().detach().numpy()
+        gen_returns = load_generated_returns(asset_name, test, quarterly).cpu().detach().numpy()
 
         # Handle NaNs in generated returns
         if np.isnan(gen_returns).any() or np.isinf(gen_returns).any():
@@ -209,10 +209,10 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, 
     display_statistics(stats_list)
 
 # ---------- EXTREME VALUE PLOT FUNCTION ---------- #
-def extreme_value_analysis(asset_name, precomputed_rolling_returns, test):
+def extreme_value_analysis(asset_name, precomputed_rolling_returns, test, quarterly):
 
     # Load generated returns
-    gen_returns = load_generated_returns(asset_name, test)
+    gen_returns = load_generated_returns(asset_name, test, quarterly)
     gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy().flatten()
     
     # Get real returns from precomputed data
@@ -233,7 +233,7 @@ def extreme_value_analysis(asset_name, precomputed_rolling_returns, test):
     plt.grid(False)
     plt.show()
 
-def load_generated_returns(asset_name, test=False):
+def load_generated_returns(asset_name, test=False, quarterly=False):
     if test:
         load_dir = 'generated_CGAN_output_test'
     else:
@@ -244,7 +244,7 @@ def load_generated_returns(asset_name, test=False):
 
     return gen_returns
 
-def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test):
+def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test, quarterly):
 
     title = f" COMPUTING WASSERSTEIN DISTANCE: {asset_name} "
     print("\n" + "═" * (len(title) + 4))
@@ -252,7 +252,7 @@ def wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test)
     print("═" * (len(title) + 4) + "\n")
 
     # Load the generated returns
-    gen_returns = load_generated_returns(asset_name, test)
+    gen_returns = load_generated_returns(asset_name, test, quarterly)
     gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy().flatten()
 
     # Retrieve precomputed empirical returns
@@ -285,14 +285,14 @@ def wasserstein_distance_plot(results):
     plt.tight_layout()
     plt.show()
 
-def nearest_distance_histogram(asset_name, precomputed_rolling_returns, test, bins=50):
+def nearest_distance_histogram(asset_name, precomputed_rolling_returns, test, quarterly, bins=50):
     title = f" COMPUTING NEAREST DISTANCE HISTOGRAM: {asset_name} "
     print("\n" + "═" * (len(title) + 4))
     print(f"║{title.center(len(title) + 2)}║")
     print("═" * (len(title) + 4) + "\n")
 
     # Load generated returns
-    gen_returns = load_generated_returns(asset_name, test)
+    gen_returns = load_generated_returns(asset_name, test, quarterly)
     gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy()
 
     # Retrieve empirical returns
@@ -342,7 +342,7 @@ def extensive_plotting(scaled, returns_df, test=False, quarterly=False):
     
   
     # Call functions using precomputed returns
-    plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, scaled, bins=500, cols=3)
+    plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, scaled, quarterly, bins=500, cols=3)
 
     print("\n" + "=" * 50 + "\n")  
 
