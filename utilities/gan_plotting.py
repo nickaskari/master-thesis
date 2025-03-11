@@ -71,7 +71,7 @@ def check_mode_collapse(real_returns, generated_returns):
     plt.title("PCA Projection of Real vs Generated Returns")
     plt.show()
 
-def analyse_assets(returns_df, precomputed_rolling_returns, test):
+def analyse_assets(returns_df, precomputed_rolling_returns, test, quarterly):
     asset_names = returns_df.columns
 
     results = []
@@ -83,7 +83,7 @@ def analyse_assets(returns_df, precomputed_rolling_returns, test):
         print("═" * (len(title) + 4) + "\n")
 
         # Load the generated returns
-        gen_returns = load_generated_returns(asset_name, test)
+        gen_returns = load_generated_returns(asset_name, test, quarterly)
         gen_returns = gen_returns.view(gen_returns.size(0), 252).cpu().detach().numpy()
 
         empirical_returns = precomputed_rolling_returns[asset_name]
@@ -92,10 +92,10 @@ def analyse_assets(returns_df, precomputed_rolling_returns, test):
         check_mode_collapse(empirical_returns, gen_returns)
 
         if asset_name != 'EONIA':
-            extreme_value_analysis(asset_name, precomputed_rolling_returns, test)
-            nearest_distance_histogram(asset_name, precomputed_rolling_returns, test)
+            extreme_value_analysis(asset_name, precomputed_rolling_returns, test, quarterly)
+            nearest_distance_histogram(asset_name, precomputed_rolling_returns, test, quarterly)
 
-        result = wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test)
+        result = wasserstein_distance_analysis(asset_name, precomputed_rolling_returns, test, quarterly)
         results.append(result)
 
 
@@ -236,10 +236,17 @@ def extreme_value_analysis(asset_name, precomputed_rolling_returns, test, quarte
 def load_generated_returns(asset_name, test=False, quarterly=False):
     if test:
         load_dir = 'generated_CGAN_output_test'
+        if quarterly:
+            load_dir = os.path.join(load_dir, 'q0')
     else:
         load_dir = 'generated_GAN_output'
+        if quarterly:
+            load_dir = os.path.join(load_dir, 'q0')
 
-    file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_final_scenarios.pt')
+    if not quarterly:
+        file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_final_scenarios.pt')
+    else:
+        file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_q0.pt')
     gen_returns = torch.load(file_path)
 
     return gen_returns
