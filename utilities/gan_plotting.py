@@ -186,6 +186,7 @@ def plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, 
         ax.hist(generated_data_scaled, bins=common_bins, alpha=0.6, color='red', label=f"{asset_name} - Generated", density=True)
 
         ax.set_title(f'{asset_name} Returns', fontsize=12)
+        print("Scaled =", scaled)
         ax.set_xlabel('Return (Scaled)' if scaled else 'Return', fontsize=10)
         ax.set_ylabel('Density', fontsize=10)
         ax.legend()
@@ -247,6 +248,8 @@ def load_generated_returns(asset_name, test=False, quarterly=False):
         file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_final_scenarios.pt')
     else:
         file_path = os.path.join(load_dir, f'generated_returns_{asset_name}_q0.pt')
+
+    print("Loaded Generated returns from:", file_path)
     gen_returns = torch.load(file_path)
 
     return gen_returns
@@ -349,7 +352,7 @@ def extensive_plotting(scaled, returns_df, test=False, quarterly=False):
     
   
     # Call functions using precomputed returns
-    plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, scaled, quarterly, bins=500, cols=3)
+    plot_histogram_distributions(returns_df, precomputed_rolling_returns, test, quarterly, scaled, bins=500, cols=3)
 
     print("\n" + "=" * 50 + "\n")  
 

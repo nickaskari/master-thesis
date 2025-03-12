@@ -1,6 +1,6 @@
 import os
 import torch
-from internal_models.utilities.creating_quarterly_conditions import update_condition_matrix
+from internal_models.utilities.creating_quarterly_conditions import update_condition_matrix, update_condition_matrix_volatility
 import numpy as np 
 
 import os
@@ -27,7 +27,8 @@ def generate_quarterly_scenarios(gan, test_returns, asset_name, num_scenarios_pe
         scenarios_dict: Dictionary where keys are labels (e.g. 'q0', 'q1', ...) and values are the generated scenarios.
     """
     # First, compute all conditions using your existing sliding-window function.
-    conditions = update_condition_matrix(gan.returns_series, test_returns, quarter_length)
+    #conditions = update_condition_matrix(gan.returns_series, test_returns, quarter_length)
+    conditions = update_condition_matrix_volatility(gan.returns_series, test_returns, quarter_length)
     total_conditions = len(conditions)
     
     # If no selected indices are provided, default to using day 0, day quarter_length, day 2*quarter_length, and the last day.
