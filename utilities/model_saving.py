@@ -76,3 +76,67 @@ def load_results():
     except (json.JSONDecodeError, ValueError):  # Handle corrupt or empty file
         print(f"Warning: {json_path} contains invalid JSON. Returning empty dictionary.")
         return {}
+    
+def append_scenario_result_json(file_path, asset, date, scenarios, overwrite=False):
+    """
+    Appends (or overwrites) a scenario result to a JSON file.
+
+    Parameters:
+      file_path (str): Path to the JSON file.
+      asset (str): Asset name.
+      date (any): Date for which the scenarios are generated. This will be converted to a string.
+      scenarios (np.ndarray): Scenario result array (e.g. shape (n_simulations, 252)).
+      overwrite (bool): If True, start from scratch (overwrite the file); 
+                        if False, append to existing file.
+    """
+    file_path = 'rolling_window_results.json'
+
+    # Convert the date to string (if not already)
+    date_str = str(date)
+
+    # Convert the scenarios array to a list for JSON storage.
+    scenarios_list = scenarios.tolist()
+
+    # If overwrite is True or the file doesn't exist, start with a new dict.
+    if overwrite or not os.path.exists(file_path):
+        data = {asset: {date_str: scenarios_list}}
+    else:
+        # Load existing JSON file.
+        with open(file_path, 'r') as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = {}
+        # If asset key doesn't exist, create it.
+        if asset not in data:
+            data[asset] = {}
+        # Store/overwrite the scenario result for this date.
+        data[asset][date_str] = scenarios_list
+
+    # Write the updated data back to the file.
+    with open(file_path, 'w') as f:
+        json.dump(data, f)
+
+def load_scenario_results_json():
+    """
+    Loads the scenario results from the given JSON file.
+    
+    Parameters:
+      file_path (str): Path to the JSON file.
+    
+    Returns:
+      dict: The dictionary containing the scenario results.
+            Returns an empty dict if the file doesn't exist or is empty.
+    """
+    file_path = 'rolling_window_results.json'
+    if not os.path.exists(file_path):
+        print(f"File {file_path} does not exist.")
+        return {}
+    
+    with open(file_path, 'r') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON from {file_path}.")
+            data = {}
+    return data

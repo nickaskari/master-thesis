@@ -19,11 +19,11 @@ class AstridGAN:
         os.makedirs(dir_path, exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=1000, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr_g", type=float, default=0.0002, help="learning rate for generator")
         parser.add_argument("--lr_d", type=float, default=0.00005, help="learning rate for discriminator")
-        parser.add_argument("--latent_dim", type=int, default=200, help="dimensionality of the latent space")
+        parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
         parser.add_argument("--window_size", type=int, default=252, help="size of the rolling window in days (1 year)")
         parser.add_argument("--sample_interval", type=int, default=400, help="interval between sampling generated return sequences")
         
@@ -162,7 +162,7 @@ class AstridGAN:
             self.accumulated_online_returns = []
             self.current_window = self.rolling_returns[-1].copy()
 
-    def generate_scenarios(self, num_scenarios=50000):
+    def generate_scenarios(self, save=True, num_scenarios=50000):
         self.generator.eval()
         all_generated_returns = []
         batch_size = 1000
@@ -177,10 +177,12 @@ class AstridGAN:
         all_generated_returns = np.vstack(all_generated_returns)
 
         save_dir = "generated_GAN_output"
-        os.makedirs(save_dir, exist_ok=True)
 
-        # Save the tensor in the specified directory
-        torch.save(torch.tensor(all_generated_returns), os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt'))
+        if save:
+            os.makedirs(save_dir, exist_ok=True)
+
+            # Save the tensor in the specified directory
+            torch.save(torch.tensor(all_generated_returns), os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt'))
 
         return all_generated_returns
 
