@@ -146,7 +146,7 @@ class CGAN1:
                 if i % 10 == 0:
                     print(f"[Epoch {epoch}/{self.n_epochs}] [Batch {i}/{len(self.dataloader)}] [D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}]")
 
-    def generate_scenarios(self, num_scenarios=50000):
+    def generate_scenarios(self, save=True, num_scenarios=50000):
         """
         Generate scenarios using the trained generator.
         For a static VaR, we use the mean of the conditions.
@@ -171,10 +171,12 @@ class CGAN1:
         all_generated_returns = np.vstack(all_generated_returns)
         
         save_dir = "generated_CGAN_output_test"
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt')
-        torch.save(torch.tensor(all_generated_returns), save_path)
-        print(f"Generated scenarios saved to: {save_path}")
+
+        if save:
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt')
+            torch.save(torch.tensor(all_generated_returns), save_path)
+            print(f"Generated scenarios saved to: {save_path}")
         
         return all_generated_returns
 

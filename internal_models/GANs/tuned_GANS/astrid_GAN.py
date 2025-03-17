@@ -1,14 +1,10 @@
-import argparse
 import os
+import argparse
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
-from torch.autograd import Variable
+from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 from sklearn.preprocessing import StandardScaler
-
 
 class AstridGAN:
     def __init__(self, returns_df, asset_name):
@@ -19,7 +15,7 @@ class AstridGAN:
         os.makedirs(dir_path, exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=1000, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=10, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr_g", type=float, default=0.0002, help="learning rate for generator")
         parser.add_argument("--lr_d", type=float, default=0.00005, help="learning rate for discriminator")
@@ -60,14 +56,29 @@ class AstridGAN:
             self.generator.cuda()
             self.discriminator.cuda()
 
-        # Ensure that our dataset has at least 2 samples.
-        rolling_returns = self.rolling_returns
-        if rolling_returns.shape[0] < self.opt.batch_size:
-            # Repeat the data so that we have at least opt.batch_size samples
-            factor = self.opt.batch_size // rolling_returns.shape[0] + 1
+        # Use the rolling_returns array from training.
+        rolling_returns = self.rolling_returns  # shape: (N, window_size, 1)
+        N = rolling_returns.shape[0]
+        
+        # Build weights for full retraining: a linear ramp from 0.5 (oldest) to 1.5 (newest)
+        weights_array = np.linspace(0.5, 1.5, N)
+        weights_tensor = torch.tensor(weights_array, dtype=torch.float32)
+
+        # If there are fewer than batch_size samples, repeat them.
+        if N < self.opt.batch_size:
+            factor = self.opt.batch_size // N + 1
             rolling_returns = np.repeat(rolling_returns, factor, axis=0)
+            N = rolling_returns.shape[0]
+            weights_array = np.tile(weights_array, factor)[:N]
+            weights_tensor = torch.tensor(weights_array, dtype=torch.float32)
+            
         rolling_returns_tensor = torch.tensor(rolling_returns, dtype=torch.float32)
-        self.dataloader = DataLoader(TensorDataset(rolling_returns_tensor), batch_size=self.opt.batch_size, shuffle=True)
+        
+        # Create WeightedRandomSampler for full retraining.
+        sampler = WeightedRandomSampler(weights=weights_tensor, num_samples=N, replacement=True)
+        
+        dataset = TensorDataset(rolling_returns_tensor)
+        self.dataloader = DataLoader(dataset, batch_size=self.opt.batch_size, sampler=sampler, drop_last=True)
 
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=self.opt.lr_g, betas=(0.5, 0.999))
         self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=self.opt.lr_d, betas=(0.5, 0.999))
@@ -77,10 +88,8 @@ class AstridGAN:
         for epoch in range(self.opt.n_epochs):
             for i, (real_returns,) in enumerate(self.dataloader):
                 batch_size = real_returns.size(0)
-                valid = torch.ones(batch_size, 1).to(real_returns.device)
-                fake = torch.zeros(batch_size, 1).to(real_returns.device)
                 real_returns = real_returns.to(real_returns.device)
-
+                
                 # Train Discriminator
                 self.optimizer_D.zero_grad()
                 z = torch.randn(batch_size, self.opt.latent_dim).to(real_returns.device)
@@ -89,7 +98,7 @@ class AstridGAN:
                 d_loss.backward()
                 self.optimizer_D.step()
 
-                # Train Generator multiple times per discriminator step
+                # Train Generator (update every 3 batches)
                 if i % 3 == 0:
                     self.optimizer_G.zero_grad()
                     z = torch.randn(batch_size, self.opt.latent_dim).to(real_returns.device)
@@ -106,59 +115,65 @@ class AstridGAN:
         Perform an online update with the new daily return.
         Accumulate new returns until we have at least 252, then create multiple rolling windows
         from the accumulated data and trigger a full retraining.
+        For fine-tuning, we further weight recent days in the current window.
         """
-        # Scale the new return using the existing scaler
+        # Scale the new return using the existing scaler.
         new_return_scaled = self.scaler.transform(np.array([[new_return]]))
-        # Append the scaled new return to the accumulated list
         self.accumulated_online_returns.append(new_return_scaled)
         
-        # Update the current window by dropping the oldest value and appending the new return
+        # Update current window: drop the oldest value and append the new return.
         self.current_window = np.concatenate((self.current_window[1:], new_return_scaled.reshape(1, 1)), axis=0)
         
-        # If we have not yet accumulated 252 new returns, perform online fine-tuning using current_window
-        if len(self.accumulated_online_returns) <= self.opt.window_size:
+        # If fewer than 252 new returns have been accumulated, perform online fine-tuning.
+        if len(self.accumulated_online_returns) < self.opt.window_size:
             self.generator.train()
             self.discriminator.train()
             
-            # Create a temporary tensor for the current window and ensure batch size > 1
-            window_tensor = torch.tensor(self.current_window, dtype=torch.float32).view(1, self.opt.window_size)
+            # Instead of a single sample, replicate the current window to create a dataset of length 252.
+            # current_window has shape (252, 1); we replicate it along a new first dimension.
+            replicated_window = np.repeat(self.current_window[np.newaxis, :, :], self.opt.window_size, axis=0)  # shape: (252, 252, 1)
+            # Squeeze the last dimension to get shape: (252, 252)
+            window_tensor = torch.tensor(replicated_window.squeeze(-1), dtype=torch.float32)  # Each sample is a 252-day sequence.
             window_tensor = window_tensor.to('cuda' if self.cuda else 'cpu')
-            if window_tensor.size(0) < 2:
-                window_tensor = window_tensor.repeat(2, 1)  # replicate to avoid BatchNorm issues
             
-            online_epochs = 5  # adjust the number of fine-tuning epochs as needed
+            # Build weights for the 252-day window: a linear ramp from 1 (oldest) to 2 (newest).
+            weights_array = np.linspace(1, 2, self.opt.window_size)
+            weights_tensor = torch.tensor(weights_array, dtype=torch.float32)
+            
+            # Create a WeightedRandomSampler for fine-tuning.
+            dataset = TensorDataset(window_tensor)
+            sampler = WeightedRandomSampler(weights=weights_tensor, num_samples=self.opt.window_size, replacement=True)
+            fine_tune_loader = DataLoader(dataset, batch_size=self.opt.batch_size, sampler=sampler)
+            
+            online_epochs = 100  # Adjust as needed.
             for epoch in range(online_epochs):
-                batch_size = window_tensor.size(0)
-                # Train Discriminator
-                self.optimizer_D.zero_grad()
-                valid = torch.ones(batch_size, 1).to(window_tensor.device)
-                fake = torch.zeros(batch_size, 1).to(window_tensor.device)
-                real_returns = window_tensor
-                z = torch.randn(batch_size, self.opt.latent_dim).to(window_tensor.device)
-                gen_returns = self.generator(z)
-                d_loss = -torch.mean(self.discriminator(real_returns)) + torch.mean(self.discriminator(gen_returns.detach()))
-                d_loss.backward()
-                self.optimizer_D.step()
-                
-                # Train Generator
-                self.optimizer_G.zero_grad()
-                z = torch.randn(batch_size, self.opt.latent_dim).to(window_tensor.device)
-                gen_returns = self.generator(z)
-                g_loss = -torch.mean(self.discriminator(gen_returns))
-                g_loss.backward()
-                self.optimizer_G.step()
-            print(f"{self.asset_name}: Online fine-tuning update completed for new return {new_return}.")
+                for (batch,) in fine_tune_loader:
+                    batch_size = batch.size(0)
+                    self.optimizer_D.zero_grad()
+                    z = torch.randn(batch_size, self.opt.latent_dim).to(batch.device)
+                    gen_returns = self.generator(z)
+                    d_loss = -torch.mean(self.discriminator(batch)) + torch.mean(self.discriminator(gen_returns.detach()))
+                    d_loss.backward()
+                    self.optimizer_D.step()
+                    
+                    self.optimizer_G.zero_grad()
+                    z = torch.randn(batch_size, self.opt.latent_dim).to(batch.device)
+                    gen_returns = self.generator(z)
+                    g_loss = -torch.mean(self.discriminator(gen_returns))
+                    g_loss.backward()
+                    self.optimizer_G.step()
+            print(f"{self.asset_name}: Weighted online fine-tuning update completed for new return {new_return}.")
         else:
-            # Once we've accumulated at least 252 new returns, create multiple rolling windows
-            new_data = np.array(self.accumulated_online_returns)  # shape: (N, 1) with N >= 252
+            # Full retraining: once at least 252 new returns have been accumulated, build new rolling windows.
+            new_data = np.array(self.accumulated_online_returns)  # shape: (N, 1) with N >= 252.
             new_rolling_returns = []
             for i in range(len(new_data) - self.opt.window_size + 1):
                 window = new_data[i:i+self.opt.window_size]
                 new_rolling_returns.append(window)
             self.rolling_returns = np.array(new_rolling_returns)
             print(f"{self.asset_name}: Performing full retraining using {len(new_rolling_returns)} rolling windows.")
-            self.train()  # Full retraining on the updated rolling_returns
-            # Reset the accumulated online returns buffer and update current_window
+            self.train()  # Full retraining on the updated rolling_returns.
+            # Reset the online accumulator and update current_window.
             self.accumulated_online_returns = []
             self.current_window = self.rolling_returns[-1].copy()
 
@@ -175,13 +190,10 @@ class AstridGAN:
                 all_generated_returns.append(gen_returns)
 
         all_generated_returns = np.vstack(all_generated_returns)
-
         save_dir = "generated_GAN_output"
 
         if save:
             os.makedirs(save_dir, exist_ok=True)
-
-            # Save the tensor in the specified directory
             torch.save(torch.tensor(all_generated_returns), os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt'))
 
         return all_generated_returns
@@ -207,6 +219,7 @@ class Generator(nn.Module):
         returns = self.model(noise)
         return returns.view(returns.size(0), *self.input_shape)
     
+
 class Discriminator(nn.Module):
     def __init__(self, input_shape):
         super(Discriminator, self).__init__()
