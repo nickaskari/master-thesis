@@ -15,7 +15,7 @@ class AstridGAN:
         os.makedirs(dir_path, exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=10, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr_g", type=float, default=0.0002, help="learning rate for generator")
         parser.add_argument("--lr_d", type=float, default=0.00005, help="learning rate for discriminator")
@@ -145,7 +145,7 @@ class AstridGAN:
             sampler = WeightedRandomSampler(weights=weights_tensor, num_samples=self.opt.window_size, replacement=True)
             fine_tune_loader = DataLoader(dataset, batch_size=self.opt.batch_size, sampler=sampler)
             
-            online_epochs = 100  # Adjust as needed.
+            online_epochs = 10  # Adjust as needed.
             for epoch in range(online_epochs):
                 for (batch,) in fine_tune_loader:
                     batch_size = batch.size(0)
