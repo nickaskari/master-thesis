@@ -145,7 +145,7 @@ class AstridGAN:
             sampler = WeightedRandomSampler(weights=weights_tensor, num_samples=self.opt.window_size, replacement=True)
             fine_tune_loader = DataLoader(dataset, batch_size=self.opt.batch_size, sampler=sampler)
             
-            online_epochs = 10  # Adjust as needed.
+            online_epochs = 50  # Adjust as needed.
             for epoch in range(online_epochs):
                 for (batch,) in fine_tune_loader:
                     batch_size = batch.size(0)
