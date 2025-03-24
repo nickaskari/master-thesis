@@ -15,7 +15,7 @@ class AstridGAN:
         os.makedirs(dir_path, exist_ok=True)
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training")
+        parser.add_argument("--n_epochs", type=int, default=2, help="number of epochs of training")
         parser.add_argument("--batch_size", type=int, default=200, help="size of the batches")
         parser.add_argument("--lr_g", type=float, default=0.0002, help="learning rate for generator")
         parser.add_argument("--lr_d", type=float, default=0.00005, help="learning rate for discriminator")
@@ -122,6 +122,8 @@ class AstridGAN:
         self.accumulated_online_returns.append(new_return_scaled)
         
         # Update current window: drop the oldest value and append the new return.
+        print("current window shape", self.current_window.shape, "\n", self.current_window)
+        print("new returns shape", new_return_scaled.shape, "\n", new_return_scaled)
         self.current_window = np.concatenate((self.current_window[1:], new_return_scaled.reshape(1, 1)), axis=0)
         
         # If fewer than 252 new returns have been accumulated, perform online fine-tuning.
@@ -145,7 +147,7 @@ class AstridGAN:
             sampler = WeightedRandomSampler(weights=weights_tensor, num_samples=self.opt.window_size, replacement=True)
             fine_tune_loader = DataLoader(dataset, batch_size=self.opt.batch_size, sampler=sampler)
             
-            online_epochs = 50  # Adjust as needed.
+            online_epochs = 2  # Adjust as needed.
             for epoch in range(online_epochs):
                 for (batch,) in fine_tune_loader:
                     batch_size = batch.size(0)
@@ -175,7 +177,7 @@ class AstridGAN:
             self.train()  # Full retraining on the updated rolling_returns.
             # Reset the online accumulator and update current_window.
             self.accumulated_online_returns = []
-            self.current_window = self.rolling_returns[-1].copy()
+            self.current_window = self.rolling_returns[-1].copy().squeeze(-1)
 
     def generate_scenarios(self, save=True, num_scenarios=50000):
         self.generator.eval()

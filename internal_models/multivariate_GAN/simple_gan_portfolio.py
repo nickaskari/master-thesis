@@ -4,7 +4,7 @@ from dotenv.main import load_dotenv
 load_dotenv(override=True)
 
 class SimpleGANPortfolio:
-    def __init__(self, gan_samples, weights, confidence=0.995):
+    def __init__(self, gan_samples, weights, bof0_casei=None, confidence=0.995):
         """
         gan_samples: Aggregated GAN output with cumulative returns, shape (n_simulations, n_assets)
         weights: Array-like of length n_assets representing portfolio weights.
@@ -17,8 +17,9 @@ class SimpleGANPortfolio:
         self.n_simulations = self.gan_samples.shape[0]
         self.n_assets = self.gan_samples.shape[1]
         self.confidence = confidence
+        self.bof0_casei = bof0_casei
 
-    def compute_portfolio(self):
+    def compute_portfolio(self, case):
         """
         Compute the portfolio cumulative return using the weighted sum of GAN-generated cumulative returns.
         Assume that the last asset (column) is used as the liability driver.
@@ -35,12 +36,19 @@ class SimpleGANPortfolio:
         liabilities_t1 = self.liabilities_0 * (1 + eonia_cum)
         
         bof_t1 = assets_t1 - liabilities_t1
-        bof_0 = self.assets_0 - self.liabilities_0
-        
+
+        if case == 2:
+          bof_0 = self.assets_0 - self.liabilities_0
+        elif case == 1:
+          bof_0 = self.bof0_casei
+        else:
+            print("Case does not exist!")
+
+
         bof_change = bof_t1 - bof_0
         return bof_change
 
-    def calculate_distribution_and_scr(self):
+    def calculate_distribution_and_scr(self, case):
         """
         Compute the distribution of BOF changes and the SCR (e.g., the 100*(1-confidence) percentile).
         
@@ -48,6 +56,6 @@ class SimpleGANPortfolio:
           bof_change: Array of BOF changes per simulation.
           scr: The SCR value computed as the appropriate percentile of bof_change.
         """
-        bof_change = self.compute_portfolio()
+        bof_change = self.compute_portfolio(case = case)
         scr = np.percentile(bof_change, 100 * (1 - self.confidence))
         return bof_change, scr
