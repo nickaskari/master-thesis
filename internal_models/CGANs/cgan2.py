@@ -11,20 +11,21 @@ from dotenv.main import load_dotenv
 load_dotenv(override=True)
 
 class CGAN2:
-    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=63, batch_size=200, n_epochs=1500):
+    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, batch_size=200, n_epochs=100):
         """
-        CGAN2: Conditional GAN for equities that conditions on a lagged quarter's volatility.
+        CGAN2: Conditional GAN for equities that now conditions on per-window statistics.
         
-        Instead of conditioning on the cumulative return over the previous quarter,
-        we condition on the standard deviation of returns over that quarter, so that the model
-        can better capture whether an extreme (volatile) period has occurred.
+        Conditions per window:
+          - Cumulative Return: product(1 + returns) - 1
+          - Volatility: standard deviation of returns
+          - VaR: 5th percentile of returns
+          - Kurtosis: excess kurtosis of returns
         
         Parameters:
           - returns_df: Empirical returns DataFrame (or Series) for the asset.
           - asset_name: Name of the asset (used to select a column if returns_df is a DataFrame).
           - latent_dim: Dimensionality of the noise vector.
           - window_size: Size of the rolling window in days (default 252, one year).
-          - quarter_length: Number of days in the quarter used to compute the condition (default 63).
           - batch_size: Batch size for training.
           - n_epochs: Number of epochs for training.
         """
@@ -32,7 +33,6 @@ class CGAN2:
         self.asset_name = asset_name
         self.latent_dim = latent_dim
         self.window_size = window_size
-        self.quarter_length = quarter_length
         self.batch_size = batch_size
         self.n_epochs = n_epochs
 
@@ -42,17 +42,17 @@ class CGAN2:
         else:
             self.returns_series = returns_df
 
-        # Create rolling windows of returns and scale them.
+        # Create rolling windows of scaled returns.
         self.rolling_returns, self.scaler = self.create_rolling_returns(self.returns_series)
-        # Automatically create condition data based on the lagged quarter volatility.
-        self.conditions = self.create_volatility_conditions(self.returns_series, window_size, quarter_length)
-        # Ensure conditions align with rolling returns: discard the first few windows if necessary.
+        # Create new conditions for each window: cumulative return, volatility, VaR, kurtosis.
+        self.conditions = self.create_window_conditions(self.rolling_returns)
+        # Align the number of rolling windows and conditions.
         min_length = min(len(self.rolling_returns), len(self.conditions))
         self.rolling_returns = self.rolling_returns[-min_length:]
-        self.conditions = self.conditions[-min_length:].reshape(-1, 1)
+        self.conditions = self.conditions[-min_length:]
         
         self.input_shape = (window_size,)
-        self.cond_dim = self.conditions.shape[1]
+        self.cond_dim = self.conditions.shape[1]  # Now 4
         self.cuda = torch.cuda.is_available()
 
         # Instantiate Generator and Discriminator with condition inputs.
@@ -85,29 +85,25 @@ class CGAN2:
             rolling_returns.append(window.flatten())
         return np.array(rolling_returns), scaler
 
-    def create_volatility_conditions(self, returns_series, window_size, quarter_length=63):
+    def create_window_conditions(self, rolling_returns):
         """
-        Automatically create conditions using the volatility (standard deviation) 
-        over the quarter immediately preceding each rolling window.
+        Create condition features for each rolling window.
         
-        For a window starting at index i, condition = std(returns_series[i - quarter_length : i]).
-        Only windows where i >= quarter_length are considered.
+        For each window, compute:
+          - Cumulative Return: product(1 + returns) - 1
+          - Volatility: standard deviation of returns
+          - VaR: 5th percentile of returns
+          - Kurtosis: excess kurtosis of returns
         
         Returns:
-          conditions: numpy array of shape (n_conditions,)
+          conditions: numpy array of shape (n_windows, 4)
         """
         conditions = []
-        # Ensure returns_series is a pandas Series.
-        if not isinstance(returns_series, pd.Series):
-            returns_series = pd.Series(returns_series)
-        
-        n = len(returns_series)
-        for i in range(quarter_length, n - window_size + 1):
-            window = returns_series.iloc[i - quarter_length:i]
-            vol = window.std()  # Standard deviation as the volatility measure.
-            if vol > 0.05:
-                vol *=100
-            conditions.append(vol)
+        for window in rolling_returns:
+            cum_return = np.prod(1 + window) - 1
+            #volatility = np.std(window)
+            #kurtosis = pd.Series(window).kurt()
+            conditions.append([cum_return])
         return np.array(conditions)
 
     def setup(self):
@@ -152,10 +148,10 @@ class CGAN2:
                 if i % 10 == 0:
                     print(f"[Epoch {epoch}/{self.n_epochs}] [Batch {i}/{len(self.dataloader)}] [D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}]")
 
-    def generate_scenarios(self, num_scenarios=50000):
+    def generate_scenarios(self, save=True, num_scenarios=50000):
         """
         Generate scenarios using the trained generator.
-        For a static VaR, we use the mean of the conditions.
+        For a static scenario generation, we use the mean of the condition features.
         
         Returns:
           all_generated_returns: NumPy array of generated 252-day return sequences.
@@ -164,9 +160,9 @@ class CGAN2:
         all_generated_returns = []
         batch_size = 1000
         device = 'cuda' if self.cuda else 'cpu'
-        # Use the mean condition from training data.
+        # Use the mean condition from training data (now 4-dimensional).
         cond_value = torch.tensor(self.conditions.mean(axis=0), dtype=torch.float32, device=device)
-        cond_value = cond_value.unsqueeze(0).repeat(batch_size, 1)  # shape: (batch_size, cond_dim)
+        cond_value = cond_value.unsqueeze(0).repeat(batch_size, 1)
         
         with torch.no_grad():
             for _ in range(num_scenarios // batch_size):
@@ -177,10 +173,11 @@ class CGAN2:
         all_generated_returns = np.vstack(all_generated_returns)
         
         save_dir = "generated_CGAN_output_test"
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt')
-        torch.save(torch.tensor(all_generated_returns), save_path)
-        print(f"Generated scenarios saved to: {save_path}")
+        if save:
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, f'generated_returns_{self.asset_name}_final_scenarios.pt')
+            torch.save(torch.tensor(all_generated_returns), save_path)
+            print(f"Generated scenarios saved to: {save_path}")
         
         return all_generated_returns
 
