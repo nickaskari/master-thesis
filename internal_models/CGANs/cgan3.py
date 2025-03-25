@@ -11,7 +11,7 @@ from dotenv.main import load_dotenv
 load_dotenv(override=True)
 
 class CGAN3:
-    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=63, batch_size=200, n_epochs=500):
+    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=10, batch_size=200, n_epochs=500):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
