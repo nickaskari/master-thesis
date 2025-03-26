@@ -11,7 +11,7 @@ from dotenv.main import load_dotenv
 load_dotenv(override=True)
 
 class CGAN3:
-    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=10, batch_size=200, n_epochs=500):
+    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, batch_size=200, n_epochs=2000):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -42,6 +42,8 @@ class CGAN3:
         self.rolling_returns, self.scaler = self.create_rolling_returns(self.returns_series)
         # Automatically create condition data based on the lagged quarter cumulative returns.
         self.conditions = self.create_lagged_quarter_conditions(self.returns_series, window_size, quarter_length)
+
+        self.conditions = self.create_multi_lag_conditions(self.returns_series, window_size, lag_periods=[100, 85, 60])
         # Ensure conditions align with rolling returns: discard the first few windows if necessary.
         min_length = min(len(self.rolling_returns), len(self.conditions))
         self.rolling_returns = self.rolling_returns[-min_length:]
@@ -103,8 +105,34 @@ class CGAN3:
             cum_return = np.prod(1 + window) - 1
             volatility = window.std()
             kurtosis = pd.Series(window).kurt()
-            conditions.append([cum_return, volatility, kurtosis])
+            conditions.append([cum_return, volatility, kurtosis])       
+            var = float(np.percentile(window, 10)) 
+        conditions.append([cum_return, volatility, var])
         return np.array(conditions)
+    
+
+    def create_multi_lag_conditions(self, returns_series, window_size, lag_periods=[252, 150, 63]):
+        conditions = []
+        # Ensure returns_series is a pandas Series.
+        if not isinstance(returns_series, pd.Series):
+            returns_series = pd.Series(returns_series)
+        
+        n = len(returns_series)
+        max_lag = max(lag_periods)
+        # Start from max_lag to ensure we have enough data for all lag periods.
+        for i in range(max_lag, n - window_size + 1):
+            condition_vector = []
+            # For each lag period, compute the metrics
+            for lag in lag_periods:
+                window = returns_series.iloc[i - lag:i].to_numpy()
+                cum_return = float(np.prod(1 + window) - 1)
+                volatility = float(window.std(ddof=1))
+                kurtosis = float(pd.Series(window).kurt())
+                var = float(np.percentile(window, 5))
+                # Extend the condition vector with metrics for this lag.
+                condition_vector.extend([cum_return, volatility, kurtosis])
+            conditions.append(condition_vector)
+        return np.array(conditions, dtype=float)
 
     def setup(self):
         # Combine rolling returns with their corresponding condition data.
