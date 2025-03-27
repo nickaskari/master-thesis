@@ -10,8 +10,8 @@ from sklearn.preprocessing import StandardScaler
 from dotenv.main import load_dotenv
 load_dotenv(override=True)
 
-class CGAN3:
-    def __init__(self, returns_df, asset_name, latent_dim=250, window_size=252, quarter_length=200, batch_size=200, n_epochs=3000):
+class NovaGAN:
+    def __init__(self, returns_df, asset_name, latent_dim=250, window_size=252, quarter_length=200, batch_size=200, n_epochs=2000):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
