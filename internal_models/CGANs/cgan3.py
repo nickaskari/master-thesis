@@ -11,7 +11,7 @@ from dotenv.main import load_dotenv
 load_dotenv(override=True)
 
 class CGAN3:
-    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, batch_size=200, n_epochs=2000):
+    def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, batch_size=200, n_epochs=3500):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -43,7 +43,7 @@ class CGAN3:
         # Automatically create condition data based on the lagged quarter cumulative returns.
         self.conditions = self.create_lagged_quarter_conditions(self.returns_series, window_size, quarter_length)
 
-        self.conditions = self.create_multi_lag_conditions(self.returns_series, window_size, lag_periods=[100, 85, 60])
+        self.conditions = self.create_multi_lag_conditions(self.returns_series, window_size, lag_periods=[110, 95, 70])
         # Ensure conditions align with rolling returns: discard the first few windows if necessary.
         min_length = min(len(self.rolling_returns), len(self.conditions))
         self.rolling_returns = self.rolling_returns[-min_length:]
@@ -105,9 +105,9 @@ class CGAN3:
             cum_return = np.prod(1 + window) - 1
             volatility = window.std()
             kurtosis = pd.Series(window).kurt()
-            conditions.append([cum_return, volatility, kurtosis])       
             var = float(np.percentile(window, 10)) 
-        conditions.append([cum_return, volatility, var])
+            conditions.append([cum_return, volatility, kurtosis])       
+
         return np.array(conditions)
     
 
@@ -119,19 +119,58 @@ class CGAN3:
         
         n = len(returns_series)
         max_lag = max(lag_periods)
-        # Start from max_lag to ensure we have enough data for all lag periods.
+        
         for i in range(max_lag, n - window_size + 1):
             condition_vector = []
             # For each lag period, compute the metrics
             for lag in lag_periods:
                 window = returns_series.iloc[i - lag:i].to_numpy()
+                
+                # Cumulative Return
                 cum_return = float(np.prod(1 + window) - 1)
+                
+                # Volatility (sample std)
                 volatility = float(window.std(ddof=1))
+                
+                # Kurtosis (excess kurtosis)
                 kurtosis = float(pd.Series(window).kurt())
-                var = float(np.percentile(window, 5))
-                # Extend the condition vector with metrics for this lag.
-                condition_vector.extend([cum_return, volatility, kurtosis])
+                
+                # CVaR: average of the worst 10% returns
+                threshold = np.percentile(window, 10)
+                tail_losses = window[window <= threshold]
+                if len(tail_losses) > 0:
+                    cvar = float(tail_losses.mean())
+                else:
+                    cvar = float(threshold)
+                
+                # Maximum Drawdown: compute the cumulative return series and then the worst drop
+                window_cum = (1 + window).cumprod()
+                running_max = np.maximum.accumulate(window_cum)
+                drawdowns = (window_cum - running_max) / running_max
+                max_drawdown = float(drawdowns.min())
+                
+                # Crash Duration: maximum number of consecutive days with negative returns
+                count = 0
+                max_count = 0
+                for r in window:
+                    if r < 0:
+                        count += 1
+                        max_count = max(max_count, count)
+                    else:
+                        count = 0
+                crash_duration = float(max_count)
+                
+                # Append all these metrics to the condition vector for the current lag period.
+                condition_vector.extend([
+                    cum_return, 
+                    volatility, 
+                    kurtosis, 
+                    cvar, 
+                    max_drawdown, 
+                    crash_duration
+                ])
             conditions.append(condition_vector)
+            
         return np.array(conditions, dtype=float)
 
     def setup(self):
