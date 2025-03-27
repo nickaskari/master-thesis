@@ -164,8 +164,8 @@ class CGAN3:
                 condition_vector.extend([
                     cum_return, 
                     volatility, 
-                    kurtosis, 
-                    cvar, 
+                    #kurtosis, 
+                    #cvar, 
                     max_drawdown, 
                     crash_duration
                 ])
@@ -289,6 +289,9 @@ class Discriminator(nn.Module):
             nn.Dropout(0.9),
             nn.Linear(1000, 1000),
             nn.BatchNorm1d(1000),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.9),
+            nn.Linear(1000, 1000),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout(0.9),
             nn.Linear(1000, 1)
