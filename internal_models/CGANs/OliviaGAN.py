@@ -16,7 +16,7 @@ load_dotenv(override=True)
 class OliviaGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=20, lambda_structure=10):
+                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=20, lambda_structure=50):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -42,8 +42,8 @@ class OliviaGAN:
         self.lambda_gp = lambda_gp
         self.lambda_tail = lambda_tail
         self.lambda_structure = lambda_structure
-        self.lambda_nn = 15.0
-        self.lambda_outlier = 100.0 
+        self.lambda_nn = 300.0
+        self.lambda_outlier = 150.0 
 
         # If returns_df is a DataFrame, select the column for the asset.
         if isinstance(returns_df, pd.DataFrame):
@@ -481,8 +481,8 @@ class OliviaGAN:
                     
                     # Compute penalties
                     tail_penalty = self.compute_tail_penalty(real_returns, gen_returns)
-                    #structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
-                    outlier_penalty = self.compute_outlier_boundary_penalty(gen_returns)
+                    structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
+                    #outlier_penalty = self.compute_outlier_boundary_penalty(gen_returns)
                     
                     # Add the new nearest neighbor penalty
                     nn_penalty = self.compute_nearest_neighbor_penalty(gen_returns)
@@ -491,7 +491,8 @@ class OliviaGAN:
                     g_loss = -torch.mean(self.discriminator(gen_returns, cond)) + \
                             self.lambda_tail * tail_penalty + \
                             self.lambda_nn * nn_penalty + \
-                            self.lambda_outlier * outlier_penalty  
+                            self.lambda_structure * structure_penalty
+                            #self.lambda_outlier * outlier_penalty  
                             #self.lambda_structure * structure_penalty + \
                     
                     g_loss.backward()
@@ -500,7 +501,7 @@ class OliviaGAN:
                 if i % 10 == 0:
                     print(f"[Epoch {epoch}/{self.n_epochs}] [Batch {i}/{len(self.dataloader)}] "
                           f"[D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}] "
-                          f"[Tail penalty: {tail_penalty.item():.4f}] [Outlier penalty: {outlier_penalty.item():.4f}]")
+                          f"[Tail penalty: {tail_penalty.item():.4f}] [Outlier penalty: {structure_penalty.item():.4f}]")
 
     def generate_scenarios(self, save=True, num_scenarios=50000):
         self.generator.eval()
