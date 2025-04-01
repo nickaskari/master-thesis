@@ -43,7 +43,7 @@ class OliviaGAN:
         self.lambda_tail = lambda_tail
         self.lambda_structure = lambda_structure
         self.lambda_nn = 15.0
-        self.lambda_outlier = 50.0 
+        self.lambda_outlier = 100.0 
 
         # If returns_df is a DataFrame, select the column for the asset.
         if isinstance(returns_df, pd.DataFrame):
@@ -382,41 +382,70 @@ class OliviaGAN:
         
         return penalty
 
-    def compute_efficient_outlier_penalty(self, gen_returns, boundary_multiplier=1.2):
+    def compute_outlier_boundary_penalty(self, gen_returns):
         """
-        Efficiently penalize outliers in 2D PCA space
-        
-        Parameters:
-        gen_returns: Generated batch of returns
-        boundary_multiplier: Multiplier to extend beyond the real data boundary
+        Enhanced outlier detection that ensures penalties are applied
         """
         batch_size = gen_returns.size(0)
         device = gen_returns.device
         
-        # Transform generated returns to 2D PCA space
+        # Transform to PCA space
         gen_flat = gen_returns.view(batch_size, -1).cpu().detach().numpy()
         gen_pca = self.pca.transform(gen_flat)
         
-        # Calculate distances from origin in PCA space
-        gen_distances = np.sqrt(gen_pca[:, 0]**2 + gen_pca[:, 1]**2)
+        # Initialize boundary info during first call
+        if not hasattr(self, 'pca_boundary_initialized'):
+            # Get real data in PCA space
+            real_pca = self.pca.transform(self.rolling_returns)
+            
+            # Create a more strict boundary - use actual min/max rather than percentiles
+            self.pca_x_min = np.min(real_pca[:, 0]) * 0.95  # Add 5% margin
+            self.pca_x_max = np.max(real_pca[:, 0]) * 0.95
+            self.pca_y_min = np.min(real_pca[:, 1]) * 0.95
+            self.pca_y_max = np.max(real_pca[:, 1]) * 0.95
+            
+            # Compute distance from origin to farthest point (for radial boundary)
+            max_distance = np.max(np.sqrt(real_pca[:, 0]**2 + real_pca[:, 1]**2))
+            self.pca_max_radius = max_distance * 0.95  # 95% of max radius
+            
+            self.pca_boundary_initialized = True
+            print(f"PCA boundaries set to: x=[{self.pca_x_min:.4f}, {self.pca_x_max:.4f}], "
+                f"y=[{self.pca_y_min:.4f}, {self.pca_y_max:.4f}], radius={self.pca_max_radius:.4f}")
         
-        # Get the max distance boundary from real data (compute once during setup)
-        if not hasattr(self, 'real_pca_boundary'):
-            # We already have real_pca_distance computed in setup
-            # Take a high percentile rather than the absolute max to allow some flexibility
-            self.real_pca_boundary = np.percentile(self.real_distances_sorted, 99.5) * boundary_multiplier
-            print(f"Real PCA boundary set to: {self.real_pca_boundary:.4f}")
+        # Calculate penalties for points outside the boundaries
+        # 1. Points outside the rectangular boundary
+        x_out_min = np.maximum(0, self.pca_x_min - gen_pca[:, 0])
+        x_out_max = np.maximum(0, gen_pca[:, 0] - self.pca_x_max)
+        y_out_min = np.maximum(0, self.pca_y_min - gen_pca[:, 1])
+        y_out_max = np.maximum(0, gen_pca[:, 1] - self.pca_y_max)
         
-        # Penalize points outside the boundary
-        excess_distances = np.maximum(0, gen_distances - self.real_pca_boundary)
+        rect_penalty = x_out_min**2 + x_out_max**2 + y_out_min**2 + y_out_max**2
         
-        # Apply quadratic penalty to incentivize staying within bounds
-        penalty_values = excess_distances ** 2
+        # 2. Points outside the circular boundary
+        distances = np.sqrt(gen_pca[:, 0]**2 + gen_pca[:, 1]**2)
+        radius_penalty = np.maximum(0, distances - self.pca_max_radius)**2
         
-        # Convert to tensor
-        penalty_tensor = torch.tensor(penalty_values, dtype=torch.float32, device=device)
+        # Combine penalties - take the maximum of the rectangular and radial penalties
+        combined_penalty = np.maximum(rect_penalty, radius_penalty)
         
-        return torch.mean(penalty_tensor)
+        # Add a diagnostic print to check penalty values
+        num_penalized = np.sum(combined_penalty > 0)
+        if num_penalized > 0:
+            avg_penalty = np.mean(combined_penalty[combined_penalty > 0])
+            max_penalty = np.max(combined_penalty)
+            print(f"Outlier penalty active: {num_penalized}/{batch_size} points penalized. "
+                f"Avg: {avg_penalty:.6f}, Max: {max_penalty:.6f}")
+        
+        # Convert to tensor with explicit non-zero check
+        penalty_tensor = torch.tensor(combined_penalty, dtype=torch.float32, device=device)
+        mean_penalty = torch.mean(penalty_tensor)
+        
+        # Add another safeguard - if values are getting zeroed out, force a minimum penalty
+        if mean_penalty < 1e-6 and num_penalized > 0:
+            print("Warning: Low penalty despite outliers detected. Enforcing minimum penalty.")
+            mean_penalty = torch.tensor(0.01, device=device)
+        
+        return mean_penalty
 
     def train(self):
         self.setup()
