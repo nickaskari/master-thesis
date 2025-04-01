@@ -16,7 +16,7 @@ load_dotenv(override=True)
 class OliviaGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=20, lambda_structure=50):
+                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=40, lambda_structure=30):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -42,7 +42,7 @@ class OliviaGAN:
         self.lambda_gp = lambda_gp
         self.lambda_tail = lambda_tail
         self.lambda_structure = lambda_structure
-        self.lambda_nn = 300.0
+        self.lambda_nn = 100.0
         self.lambda_outlier = 150.0 
 
         # If returns_df is a DataFrame, select the column for the asset.
@@ -148,8 +148,8 @@ class OliviaGAN:
                 condition_vector.extend([
                     cum_return, 
                     volatility, 
-                    kurtosis
-                    #max_drawdown, 
+                    kurtosis,
+                    max_drawdown, 
                     #crash_duration
                 ])
             conditions.append(condition_vector)
@@ -382,70 +382,73 @@ class OliviaGAN:
         
         return penalty
 
-    def compute_outlier_boundary_penalty(self, gen_returns):
+    def compute_outlier_boundary_penalty(self, gen_returns, outlier_percentile=90):
         """
-        Enhanced outlier detection that ensures penalties are applied
+        Specifically penalize the most extreme outliers in PCA space
+        
+        Parameters:
+        gen_returns: Generated batch of returns
+        outlier_percentile: Percentile threshold to identify outlier points (e.g., 90 = top 10% most extreme)
         """
         batch_size = gen_returns.size(0)
         device = gen_returns.device
         
-        # Transform to PCA space
+        # Transform generated returns to 2D PCA space
         gen_flat = gen_returns.view(batch_size, -1).cpu().detach().numpy()
         gen_pca = self.pca.transform(gen_flat)
         
-        # Initialize boundary info during first call
-        if not hasattr(self, 'pca_boundary_initialized'):
-            # Get real data in PCA space
+        # Calculate distances from origin
+        gen_distances = np.sqrt(gen_pca[:, 0]**2 + gen_pca[:, 1]**2)
+        
+        # Compute or retrieve the convex hull of real data points (boundary)
+        if not hasattr(self, 'real_data_hull'):
+            from scipy.spatial import ConvexHull
             real_pca = self.pca.transform(self.rolling_returns)
             
-            # Create a more strict boundary - use actual min/max rather than percentiles
-            self.pca_x_min = np.min(real_pca[:, 0]) * 0.95  # Add 5% margin
-            self.pca_x_max = np.max(real_pca[:, 0]) * 0.95
-            self.pca_y_min = np.min(real_pca[:, 1]) * 0.95
-            self.pca_y_max = np.max(real_pca[:, 1]) * 0.95
+            # Create a slightly expanded hull to allow some flexibility
+            # Find the centroid of all points
+            centroid = np.mean(real_pca, axis=0)
             
-            # Compute distance from origin to farthest point (for radial boundary)
-            max_distance = np.max(np.sqrt(real_pca[:, 0]**2 + real_pca[:, 1]**2))
-            self.pca_max_radius = max_distance * 0.95  # 95% of max radius
+            # Expand points slightly outward from centroid (by 5%)
+            expanded_points = centroid + (real_pca - centroid) * 1.05
             
-            self.pca_boundary_initialized = True
-            print(f"PCA boundaries set to: x=[{self.pca_x_min:.4f}, {self.pca_x_max:.4f}], "
-                f"y=[{self.pca_y_min:.4f}, {self.pca_y_max:.4f}], radius={self.pca_max_radius:.4f}")
+            # Calculate the convex hull of these expanded points
+            self.real_data_hull = ConvexHull(expanded_points)
+            print("Created convex hull boundary for real data in PCA space")
         
-        # Calculate penalties for points outside the boundaries
-        # 1. Points outside the rectangular boundary
-        x_out_min = np.maximum(0, self.pca_x_min - gen_pca[:, 0])
-        x_out_max = np.maximum(0, gen_pca[:, 0] - self.pca_x_max)
-        y_out_min = np.maximum(0, self.pca_y_min - gen_pca[:, 1])
-        y_out_max = np.maximum(0, gen_pca[:, 1] - self.pca_y_max)
+        # Identify the most extreme generated points
+        outlier_threshold = np.percentile(gen_distances, outlier_percentile)
+        outlier_mask = gen_distances >= outlier_threshold
+        outlier_points = gen_pca[outlier_mask]
         
-        rect_penalty = x_out_min**2 + x_out_max**2 + y_out_min**2 + y_out_max**2
+        # If no outliers are identified, return zero penalty
+        if len(outlier_points) == 0:
+            return torch.tensor(0.0, device=device)
         
-        # 2. Points outside the circular boundary
-        distances = np.sqrt(gen_pca[:, 0]**2 + gen_pca[:, 1]**2)
-        radius_penalty = np.maximum(0, distances - self.pca_max_radius)**2
+        # For each outlier point, calculate distance to the hull boundary
+        from scipy.spatial import distance_matrix
         
-        # Combine penalties - take the maximum of the rectangular and radial penalties
-        combined_penalty = np.maximum(rect_penalty, radius_penalty)
+        # Get the hull vertices in PCA space
+        hull_vertices = self.real_data_hull.points[self.real_data_hull.vertices]
         
-        # Add a diagnostic print to check penalty values
-        num_penalized = np.sum(combined_penalty > 0)
-        if num_penalized > 0:
-            avg_penalty = np.mean(combined_penalty[combined_penalty > 0])
-            max_penalty = np.max(combined_penalty)
-            print(f"Outlier penalty active: {num_penalized}/{batch_size} points penalized. "
-                f"Avg: {avg_penalty:.6f}, Max: {max_penalty:.6f}")
+        # Calculate distances from each outlier to each hull vertex
+        dist_matrix = distance_matrix(outlier_points, hull_vertices)
         
-        # Convert to tensor with explicit non-zero check
-        penalty_tensor = torch.tensor(combined_penalty, dtype=torch.float32, device=device)
-        mean_penalty = torch.mean(penalty_tensor)
+        # For each outlier, find the minimum distance to any hull vertex
+        min_distances = np.min(dist_matrix, axis=1)
         
-        # Add another safeguard - if values are getting zeroed out, force a minimum penalty
-        if mean_penalty < 1e-6 and num_penalized > 0:
-            print("Warning: Low penalty despite outliers detected. Enforcing minimum penalty.")
-            mean_penalty = torch.tensor(0.01, device=device)
+        # Convert to tensor and compute mean squared penalty
+        distances_tensor = torch.tensor(min_distances, dtype=torch.float32, device=device)
+        penalty = torch.mean(distances_tensor ** 2)
         
-        return mean_penalty
+        # Add diagnostic information
+        num_outliers = len(outlier_points)
+        avg_distance = np.mean(min_distances)
+        max_distance = np.max(min_distances)
+        print(f"Outlier penalty: {num_outliers}/{batch_size} points (>{outlier_percentile}%). "
+            f"Avg dist: {avg_distance:.4f}, Max dist: {max_distance:.4f}, Penalty: {penalty.item():.4f}")
+        
+        return penalty
 
     def train(self):
         self.setup()
@@ -482,16 +485,17 @@ class OliviaGAN:
                     # Compute penalties
                     tail_penalty = self.compute_tail_penalty(real_returns, gen_returns)
                     structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
-                    #outlier_penalty = self.compute_outlier_boundary_penalty(gen_returns)
+                    outlier_penalty = self.compute_outlier_boundary_penalty(gen_returns)
                     
                     # Add the new nearest neighbor penalty
-                    nn_penalty = self.compute_nearest_neighbor_penalty(gen_returns)
+                    #nn_penalty = self.compute_nearest_neighbor_penalty(gen_returns)
                     
                     # Add all penalties to generator loss
                     g_loss = -torch.mean(self.discriminator(gen_returns, cond)) + \
                             self.lambda_tail * tail_penalty + \
-                            self.lambda_nn * nn_penalty + \
-                            self.lambda_structure * structure_penalty
+                            self.lambda_structure * structure_penalty 
+                            #self.lambda_nn * nn_penalty + \
+                            
                             #self.lambda_outlier * outlier_penalty  
                             #self.lambda_structure * structure_penalty + \
                     
