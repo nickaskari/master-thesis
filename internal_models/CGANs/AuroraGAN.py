@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,9 +13,10 @@ from torch import autograd  # for computing gradients
 
 load_dotenv(override=True)
 
-class NovaGAN:
+class AuroraGAN:
+    # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=5):
+                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=15):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -182,23 +184,55 @@ class NovaGAN:
         return penalty
 
     def compute_tail_penalty(self, real_returns, gen_returns):
-        """
-        Computes a penalty based on the difference between the lower 10% average of the real and generated returns.
-        Both inputs are expected to be tensors of shape (batch_size, window_size).
-        """
-        # Flatten to get overall distribution in the batch.
+        """Penalize differences in both lower and upper tails"""
         real_flat = real_returns.view(-1)
         gen_flat = gen_returns.view(-1)
         
         k = int(0.1 * real_flat.size(0))
         k = max(k, 1)
+        
+        # Sort for lower and upper tails
         real_sorted, _ = torch.sort(real_flat)
         gen_sorted, _ = torch.sort(gen_flat)
         
-        real_tail_mean = torch.mean(real_sorted[:k])
-        gen_tail_mean = torch.mean(gen_sorted[:k])
-        penalty = (gen_tail_mean - real_tail_mean) ** 2
-        return penalty
+        # Lower tail penalty
+        real_lower_tail = torch.mean(real_sorted[:k])
+        gen_lower_tail = torch.mean(gen_sorted[:k])
+        lower_penalty = (gen_lower_tail - real_lower_tail) ** 2
+        
+        # Upper tail penalty
+        real_upper_tail = torch.mean(real_sorted[-k:])
+        gen_upper_tail = torch.mean(gen_sorted[-k:])
+        upper_penalty = (gen_upper_tail - real_upper_tail) ** 2
+        
+        return lower_penalty + upper_penalty
+    
+    def compute_structure_penalty(self, real_returns, gen_returns):
+        """Penalty to preserve the ring structure in PCA space"""
+        # For simplicity, use the first 2 PCs as a proxy
+        pca = PCA(n_components=2)
+        real_flat = real_returns.view(real_returns.size(0), -1).cpu().numpy()
+        gen_flat = gen_returns.view(gen_returns.size(0), -1).cpu().numpy()
+        
+        # Fit PCA on real data
+        pca.fit(real_flat)
+        
+        # Transform both datasets
+        real_pca = torch.tensor(pca.transform(real_flat), device=real_returns.device)
+        gen_pca = torch.tensor(pca.transform(gen_flat), device=gen_returns.device)
+        
+        # Calculate distance from origin for each point
+        real_dist = torch.sqrt(torch.sum(real_pca**2, dim=1))
+        gen_dist = torch.sqrt(torch.sum(gen_pca**2, dim=1))
+        
+        # Compare distributions of distances (this preserves the ring structure)
+        real_dist_sorted, _ = torch.sort(real_dist)
+        gen_dist_sorted, _ = torch.sort(gen_dist)
+        
+        # Calculate MSE between sorted distances to match the ring structure
+        dist_penalty = F.mse_loss(gen_dist_sorted, real_dist_sorted)
+        
+        return dist_penalty
 
     def train(self):
         self.setup()

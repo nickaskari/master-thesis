@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,9 +13,10 @@ from torch import autograd  # for computing gradients
 
 load_dotenv(override=True)
 
-class NovaGAN:
+class OliviaGAN:
+    # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=5):
+                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=20, lambda_structure=10):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -28,6 +30,7 @@ class NovaGAN:
           - n_epochs: Number of epochs for training.
           - lambda_gp: Coefficient for the gradient penalty term.
           - lambda_tail: Coefficient for the tail penalty term.
+          - lambda_structure: Coefficient for the structure penalty term.
         """
         self.returns_df = returns_df
         self.asset_name = asset_name
@@ -38,6 +41,8 @@ class NovaGAN:
         self.n_epochs = n_epochs
         self.lambda_gp = lambda_gp
         self.lambda_tail = lambda_tail
+        self.lambda_structure = lambda_structure
+        self.lambda_nn = 15.0
 
         # If returns_df is a DataFrame, select the column for the asset.
         if isinstance(returns_df, pd.DataFrame):
@@ -50,7 +55,7 @@ class NovaGAN:
         # Automatically create condition data based on the lagged quarter cumulative returns.
         self.conditions = self.create_lagged_quarter_conditions(self.returns_series, window_size, quarter_length)
 
-        self.conditions = self.create_multi_lag_conditions(self.returns_series, window_size, lag_periods=[110, 95, 70])
+        self.conditions = self.create_multi_lag_conditions(self.returns_series, window_size, lag_periods=[251])
         # Ensure conditions align with rolling returns: discard the first few windows if necessary.
         min_length = min(len(self.rolling_returns), len(self.conditions))
         self.rolling_returns = self.rolling_returns[-min_length:]
@@ -67,6 +72,11 @@ class NovaGAN:
         self.dataloader = None
         self.optimizer_G = None
         self.optimizer_D = None
+        
+        # PCA and related attributes will be initialized in setup()
+        self.pca = None
+        self.real_distances_sorted = None
+        self.real_distances_tensor = None
 
     def create_rolling_returns(self, returns_series):
         """
@@ -137,16 +147,18 @@ class NovaGAN:
                 condition_vector.extend([
                     cum_return, 
                     volatility, 
-                    max_drawdown, 
-                    crash_duration
+                    kurtosis
+                    #max_drawdown, 
+                    #crash_duration
                 ])
             conditions.append(condition_vector)
             
         return np.array(conditions, dtype=float)
 
     def setup(self):
+        # Original setup code
         dataset = TensorDataset(torch.tensor(self.rolling_returns, dtype=torch.float32),
-                                 torch.tensor(self.conditions, dtype=torch.float32))
+                                torch.tensor(self.conditions, dtype=torch.float32))
         self.dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
         if self.cuda:
@@ -155,6 +167,44 @@ class NovaGAN:
 
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
         self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=0.0001, betas=(0.5, 0.999))
+        
+        # Pre-compute PCA on all training data
+        self.pca = PCA(n_components=2)
+        self.pca.fit(self.rolling_returns)
+        
+        # Compute PCA projections and distances
+        real_pca = self.pca.transform(self.rolling_returns)
+        real_distances = np.sqrt(np.sum(real_pca**2, axis=1))
+        self.real_distances_sorted = np.sort(real_distances)
+        self.real_distances_tensor = torch.tensor(self.real_distances_sorted, dtype=torch.float32)
+        
+        # Compute volatility for each window in the original dataset
+        # Extract volatility values from conditions (assuming volatility is at index 1 in each condition)
+        # This works because your conditions include volatility as one of the features
+        volatilities = self.conditions[:, 1]  # Adjust index if needed based on your condition structure
+        
+        # Create volatility to radius mapping
+        # This creates a dict mapping volatility bins to typical radius values
+        self.vol_to_radius = {}
+        n_bins = 20
+        vol_bins = np.linspace(np.min(volatilities), np.max(volatilities), n_bins+1)
+        
+        for i in range(n_bins):
+            vol_min, vol_max = vol_bins[i], vol_bins[i+1]
+            mask = (volatilities >= vol_min) & (volatilities < vol_max)
+            
+            if np.sum(mask) > 0:
+                # Get the distances for windows in this volatility bin
+                bin_distances = real_distances[mask]
+                # Store median and std of distances for this volatility bin
+                bin_vol = (vol_min + vol_max) / 2
+                self.vol_to_radius[bin_vol] = {
+                    'median': np.median(bin_distances),
+                    'std': np.std(bin_distances)
+                }
+        
+        if self.cuda:
+            self.real_distances_tensor = self.real_distances_tensor.cuda()
 
     def compute_gradient_penalty(self, real_samples, fake_samples, cond):
         """Calculates the gradient penalty loss for WGAN-GP"""
@@ -182,22 +232,153 @@ class NovaGAN:
         return penalty
 
     def compute_tail_penalty(self, real_returns, gen_returns):
-        """
-        Computes a penalty based on the difference between the lower 10% average of the real and generated returns.
-        Both inputs are expected to be tensors of shape (batch_size, window_size).
-        """
-        # Flatten to get overall distribution in the batch.
+        """Penalize differences in both lower and upper tails"""
         real_flat = real_returns.view(-1)
         gen_flat = gen_returns.view(-1)
         
         k = int(0.1 * real_flat.size(0))
         k = max(k, 1)
+        
+        # Sort for lower and upper tails
         real_sorted, _ = torch.sort(real_flat)
         gen_sorted, _ = torch.sort(gen_flat)
         
-        real_tail_mean = torch.mean(real_sorted[:k])
-        gen_tail_mean = torch.mean(gen_sorted[:k])
-        penalty = (gen_tail_mean - real_tail_mean) ** 2
+        # Lower tail penalty
+        real_lower_tail = torch.mean(real_sorted[:k])
+        gen_lower_tail = torch.mean(gen_sorted[:k])
+        lower_penalty = (gen_lower_tail - real_lower_tail) ** 2
+        
+        # Upper tail penalty
+        real_upper_tail = torch.mean(real_sorted[-k:])
+        gen_upper_tail = torch.mean(gen_sorted[-k:])
+        upper_penalty = (gen_upper_tail - real_upper_tail) ** 2
+        
+        return lower_penalty + upper_penalty
+    
+    def compute_structure_penalty(self, gen_returns):
+        """Penalty to preserve the ring structure using pre-computed PCA"""
+        # Get batch size
+        batch_size = gen_returns.size(0)
+        
+        # Transform generated returns using pre-computed PCA
+        gen_flat = gen_returns.view(batch_size, -1).cpu().detach().numpy()
+        gen_pca = self.pca.transform(gen_flat)
+        
+        # Calculate distances from origin
+        gen_distances = np.sqrt(np.sum(gen_pca**2, axis=1))
+        gen_distances_sorted = np.sort(gen_distances)
+        
+        # Convert to tensor
+        gen_distances_tensor = torch.tensor(gen_distances_sorted, 
+                                          dtype=torch.float32, 
+                                          device=gen_returns.device)
+        
+        # Sample points from real distances to match batch size
+        indices = np.linspace(0, len(self.real_distances_sorted)-1, batch_size, dtype=int)
+        real_sample = self.real_distances_tensor[indices].to(gen_returns.device)
+        
+        # Calculate MSE
+        dist_penalty = F.mse_loss(gen_distances_tensor, real_sample)
+        
+        return dist_penalty
+
+    def compute_vol_structure_penalty(self, gen_returns, cond):
+        """Penalty to preserve the ring structure using volatility as a guide"""
+        batch_size = gen_returns.size(0)
+        
+        # Extract volatility from conditions (adjust index if needed)
+        volatilities = cond[:, 1].cpu().detach().numpy()
+        
+        # Transform generated returns using pre-computed PCA
+        gen_flat = gen_returns.view(batch_size, -1).cpu().detach().numpy()
+        gen_pca = self.pca.transform(gen_flat)
+        
+        # Calculate distances from origin
+        gen_distances = np.sqrt(np.sum(gen_pca**2, axis=1))
+        
+        # Calculate target distances based on volatility
+        target_distances = np.zeros_like(gen_distances)
+        
+        for i, vol in enumerate(volatilities):
+            # Find closest volatility bin
+            closest_vol = min(self.vol_to_radius.keys(), key=lambda x: abs(x - vol))
+            
+            # Get expected radius and variation
+            expected_radius = self.vol_to_radius[closest_vol]['median'] * (vol / closest_vol)**0.5
+            radius_std = self.vol_to_radius[closest_vol]['std']
+            
+            # Set target distance with some noise to avoid collapse
+            target_distances[i] = expected_radius
+        
+        # Convert to tensors
+        gen_distances_tensor = torch.tensor(gen_distances, dtype=torch.float32, device=gen_returns.device)
+        target_distances_tensor = torch.tensor(target_distances, dtype=torch.float32, device=gen_returns.device)
+        
+        # Calculate MSE between actual and target distances
+        dist_penalty = F.mse_loss(gen_distances_tensor, target_distances_tensor)
+        
+        return dist_penalty
+    
+    def compute_nearest_neighbor_penalty(self, gen_returns, max_distance_multiplier=3.0):
+        """
+        Penalize generated points that are too far from their closest real point in PCA space
+        
+        Parameters:
+        gen_returns: Generated batch of returns
+        max_distance_multiplier: How many times the average NN distance is allowed before penalty
+        """
+        batch_size = gen_returns.size(0)
+        
+        # Transform generated returns using pre-computed PCA
+        gen_flat = gen_returns.view(batch_size, -1).cpu().detach().numpy()
+        gen_pca = self.pca.transform(gen_flat)
+        
+        # Get real data in PCA space (compute once during setup and store for efficiency)
+        if not hasattr(self, 'real_pca'):
+            self.real_pca = self.pca.transform(self.rolling_returns)
+        
+        # Calculate nearest neighbor distances for each generated point
+        nn_distances = []
+        
+        for i in range(batch_size):
+            # Calculate distance to all real points
+            distances = np.sqrt(np.sum((self.real_pca - gen_pca[i])**2, axis=1))
+            # Get minimum distance (nearest neighbor)
+            min_distance = np.min(distances)
+            nn_distances.append(min_distance)
+        
+        nn_distances = np.array(nn_distances)
+        
+        # Get average nearest neighbor distance from real data to real data (compute once during setup)
+        if not hasattr(self, 'avg_real_nn_distance'):
+            real_nn_distances = []
+            for i in range(len(self.real_pca)):
+                # Calculate distances to all other real points
+                distances = np.sqrt(np.sum((self.real_pca - self.real_pca[i])**2, axis=1))
+                # Sort distances and take second smallest (first is distance to self = 0)
+                sorted_distances = np.sort(distances)
+                nearest_neighbor_dist = sorted_distances[1]  # First non-zero distance
+                real_nn_distances.append(nearest_neighbor_dist)
+            
+            self.avg_real_nn_distance = np.mean(real_nn_distances)
+            self.std_real_nn_distance = np.std(real_nn_distances)
+        
+        # Calculate threshold beyond which we apply penalties
+        threshold = self.avg_real_nn_distance * max_distance_multiplier
+        
+        # Only penalize points that are too far away
+        excess_distances = np.maximum(0, nn_distances - threshold)
+        
+        # Convert to tensor for the loss
+        excess_distances_tensor = torch.tensor(
+            excess_distances, 
+            dtype=torch.float32, 
+            device=gen_returns.device
+        )
+        
+        # Use mean squared error as the penalty
+        penalty = torch.mean(excess_distances_tensor ** 2)
+        
         return penalty
 
     def train(self):
@@ -227,18 +408,31 @@ class NovaGAN:
 
                 # -----------------
                 #  Train Generator
-                # -----------------
+                    # -----------------
                 if i % 3 == 0:
                     self.optimizer_G.zero_grad()
                     gen_returns = self.generator(z, cond)
+                    
+                    # Compute penalties
                     tail_penalty = self.compute_tail_penalty(real_returns, gen_returns)
-                    g_loss = -torch.mean(self.discriminator(gen_returns, cond)) + self.lambda_tail * tail_penalty
+                    structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
+                    
+                    # Add the new nearest neighbor penalty
+                    nn_penalty = self.compute_nearest_neighbor_penalty(gen_returns)
+                    
+                    # Add all penalties to generator loss
+                    g_loss = -torch.mean(self.discriminator(gen_returns, cond)) + \
+                            self.lambda_tail * tail_penalty + \
+                            self.lambda_nn * nn_penalty  # Add new lambda parameter
+                            #self.lambda_structure * structure_penalty + \
+                    
                     g_loss.backward()
                     self.optimizer_G.step()
 
                 if i % 10 == 0:
                     print(f"[Epoch {epoch}/{self.n_epochs}] [Batch {i}/{len(self.dataloader)}] "
-                          f"[D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}]")
+                          f"[D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}] "
+                          f"[Tail penalty: {tail_penalty.item():.4f}] [Structure penalty: {structure_penalty.item():.4f}]")
 
     def generate_scenarios(self, save=True, num_scenarios=50000):
         self.generator.eval()
