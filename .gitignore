@@ -13,3 +13,6 @@
 
 /rolling_window_results.json
 .rolling_window_results.json
+
+/data/all_yield_data(big).csv
+.all_yield_data(big).csv
