@@ -482,7 +482,7 @@ class OliviaGAN:
                     # Compute penalties
                     tail_penalty = self.compute_tail_penalty(real_returns, gen_returns)
                     #structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
-                    outlier_penalty = self.compute_efficient_outlier_penalty(gen_returns)
+                    outlier_penalty = self.compute_outlier_boundary_penalty(gen_returns)
                     
                     # Add the new nearest neighbor penalty
                     nn_penalty = self.compute_nearest_neighbor_penalty(gen_returns)
