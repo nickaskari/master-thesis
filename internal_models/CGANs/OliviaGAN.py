@@ -43,6 +43,7 @@ class OliviaGAN:
         self.lambda_tail = lambda_tail
         self.lambda_structure = lambda_structure
         self.lambda_nn = 15.0
+        self.lambda_outlier = 50.0 
 
         # If returns_df is a DataFrame, select the column for the asset.
         if isinstance(returns_df, pd.DataFrame):
@@ -381,6 +382,42 @@ class OliviaGAN:
         
         return penalty
 
+    def compute_efficient_outlier_penalty(self, gen_returns, boundary_multiplier=1.2):
+        """
+        Efficiently penalize outliers in 2D PCA space
+        
+        Parameters:
+        gen_returns: Generated batch of returns
+        boundary_multiplier: Multiplier to extend beyond the real data boundary
+        """
+        batch_size = gen_returns.size(0)
+        device = gen_returns.device
+        
+        # Transform generated returns to 2D PCA space
+        gen_flat = gen_returns.view(batch_size, -1).cpu().detach().numpy()
+        gen_pca = self.pca.transform(gen_flat)
+        
+        # Calculate distances from origin in PCA space
+        gen_distances = np.sqrt(gen_pca[:, 0]**2 + gen_pca[:, 1]**2)
+        
+        # Get the max distance boundary from real data (compute once during setup)
+        if not hasattr(self, 'real_pca_boundary'):
+            # We already have real_pca_distance computed in setup
+            # Take a high percentile rather than the absolute max to allow some flexibility
+            self.real_pca_boundary = np.percentile(self.real_distances_sorted, 99.5) * boundary_multiplier
+            print(f"Real PCA boundary set to: {self.real_pca_boundary:.4f}")
+        
+        # Penalize points outside the boundary
+        excess_distances = np.maximum(0, gen_distances - self.real_pca_boundary)
+        
+        # Apply quadratic penalty to incentivize staying within bounds
+        penalty_values = excess_distances ** 2
+        
+        # Convert to tensor
+        penalty_tensor = torch.tensor(penalty_values, dtype=torch.float32, device=device)
+        
+        return torch.mean(penalty_tensor)
+
     def train(self):
         self.setup()
         for epoch in range(self.n_epochs):
@@ -415,7 +452,8 @@ class OliviaGAN:
                     
                     # Compute penalties
                     tail_penalty = self.compute_tail_penalty(real_returns, gen_returns)
-                    structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
+                    #structure_penalty = self.compute_vol_structure_penalty(gen_returns, cond)
+                    outlier_penalty = self.compute_efficient_outlier_penalty(gen_returns)
                     
                     # Add the new nearest neighbor penalty
                     nn_penalty = self.compute_nearest_neighbor_penalty(gen_returns)
@@ -423,7 +461,8 @@ class OliviaGAN:
                     # Add all penalties to generator loss
                     g_loss = -torch.mean(self.discriminator(gen_returns, cond)) + \
                             self.lambda_tail * tail_penalty + \
-                            self.lambda_nn * nn_penalty  # Add new lambda parameter
+                            self.lambda_nn * nn_penalty + \
+                            self.lambda_outlier * outlier_penalty  
                             #self.lambda_structure * structure_penalty + \
                     
                     g_loss.backward()
@@ -432,7 +471,7 @@ class OliviaGAN:
                 if i % 10 == 0:
                     print(f"[Epoch {epoch}/{self.n_epochs}] [Batch {i}/{len(self.dataloader)}] "
                           f"[D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}] "
-                          f"[Tail penalty: {tail_penalty.item():.4f}] [Structure penalty: {structure_penalty.item():.4f}]")
+                          f"[Tail penalty: {tail_penalty.item():.4f}] [Outlier penalty: {outlier_penalty.item():.4f}]")
 
     def generate_scenarios(self, save=True, num_scenarios=50000):
         self.generator.eval()
