@@ -4,7 +4,7 @@ import seaborn as sns
 import pandas as pd
 import os
 
-def plot_bof_var(bof_change, scr, title, bof_0):
+def plot_bof_var(bof_change, scr, title):
     assets_0 = int(os.getenv("INIT_ASSETS"))
 
     bof_change = np.array(bof_change)

@@ -9,14 +9,14 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
 from dotenv.main import load_dotenv
-from torch import autograd  # for computing gradients
+from torch import autograd, device  # for computing gradients
 
 load_dotenv(override=True)
 
 class OliviaGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=5, lambda_gp=60, lambda_tail=40, lambda_structure=30):
+                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=40, lambda_structure=30):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -350,7 +350,7 @@ class OliviaGAN:
                 if i % 10 == 0:
                     print(f"[Epoch {epoch}/{self.n_epochs}] [Batch {i}/{len(self.dataloader)}] "
                           f"[D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}] "
-                          f"[Tail penalty: {tail_penalty.item():.4f}] [Outlier penalty: {structure_penalty.item():.4f}]")
+                          f"[Tail penalty: {tail_penalty.item():.4f}] [Structure penalty: {structure_penalty.item():.4f}]")
 
     def generate_scenarios(self, save=True, num_scenarios=50000):
         self.generator.eval()
@@ -380,20 +380,14 @@ class OliviaGAN:
         return all_generated_returns
     
     def generate_new_scenarios_from_return(self, new_return, date, save=False, num_scenarios=10000):
-        self.generator.eval()
-        device = 'cuda' if self.cuda else 'cpu'
         
         # Update the returns series with the new return
         if isinstance(self.returns_series, pd.Series):
-            # Add the new return to the series
             new_row = pd.Series([new_return], index=[date])
             self.returns_series = pd.concat([self.returns_series, new_row])
         else:
-            # If it's not a pandas Series, convert to numpy and append
             self.returns_series = np.append(self.returns_series, new_return)
         
-        # Recalculate the rolling returns with the new data
-        self.rolling_returns, self.scaler = self.create_rolling_returns(self.returns_series)
         
         # Update conditions with the new return
         self.conditions = self.create_multi_lag_conditions(
@@ -401,38 +395,19 @@ class OliviaGAN:
             self.window_size, 
             lag_periods=[251]
         )
-        
-        # Ensure lengths match
-        min_length = min(len(self.rolling_returns), len(self.conditions))
-        self.rolling_returns = self.rolling_returns[-min_length:]
-        self.conditions = self.conditions[-min_length:]
-        
-        # Update PCA and distance calculations with new data
-        self.pca = PCA(n_components=2)
-        self.pca.fit(self.rolling_returns)
-        
-        # Compute PCA projections and distances
-        real_pca = self.pca.transform(self.rolling_returns)
-        real_distances = np.sqrt(np.sum(real_pca**2, axis=1))
-        self.real_distances_sorted = np.sort(real_distances)
-        self.real_distances_tensor = torch.tensor(self.real_distances_sorted, dtype=torch.float32)
-        
-        if self.cuda:
-            self.real_distances_tensor = self.real_distances_tensor.cuda()
-        
+        device = 'cuda' if self.cuda else 'cpu'
+
         # Generate new scenarios
         all_generated_returns = []
         batch_size = 1000
         
         with torch.no_grad():
+            rel = self.conditions[-1:]
             for _ in range(num_scenarios // batch_size):
                 z = torch.randn(batch_size, self.latent_dim, device=device)
-                
-                # Use the most recent conditions as they incorporate the new return
-                most_recent_cond = self.conditions[-1:]
-                cond = torch.tensor(np.repeat(most_recent_cond, batch_size, axis=0), 
-                                dtype=torch.float32, 
-                                device=device)
+                condition_indices = np.random.choice(len(rel), batch_size, replace=True)
+                sampled_conditions = rel[condition_indices]
+                cond = torch.tensor(sampled_conditions, dtype=torch.float32, device=device)
                 
                 gen_returns = self.generator(z, cond)
                 
@@ -443,6 +418,7 @@ class OliviaGAN:
                 all_generated_returns.append(gen_returns_original)
         
         all_generated_returns = np.vstack(all_generated_returns)
+        all_generated_returns = self.adjust_for_optimism(all_generated_returns)
         
         if save:
             save_dir = "generated_CGAN_output_test"
@@ -452,6 +428,44 @@ class OliviaGAN:
             print(f"Generated scenarios saved to: {save_path}")
         
         return all_generated_returns
+
+    def adjust_for_optimism(self, generated_returns):
+        # Get recent market performance
+        if len(self.returns_series) < 30:
+            # Not enough data for adjustment
+            return generated_returns
+        
+        # Look at the last month of returns
+        recent_returns = self.returns_series[-30:].values
+        recent_cumulative = np.prod(1 + recent_returns) - 1
+        recent_drawdown = (np.cumprod(1 + recent_returns) / np.maximum.accumulate(np.cumprod(1 + recent_returns)) - 1).min()
+        
+        # Calculate adjustment factor based on recent performance
+        # More negative drawdown = stronger positive adjustment
+        # Base optimism always present
+        base_optimism = 0.0005 
+        
+        # Additional optimism based on drawdown severity
+        drawdown_adjustment = max(0, -recent_drawdown * 0.009)
+        
+        # Reduce adjustment if recent cumulative return is already strongly positive
+        if recent_cumulative > 0.05:  # If recent month is up >5%
+            cumulative_dampening = 0.5  # Reduce adjustment by 50%
+        else:
+            cumulative_dampening = 1.0
+        
+        # Calculate total adjustment
+        total_adjustment = (base_optimism + drawdown_adjustment) * cumulative_dampening
+        
+        # Apply adjustment - shift the entire distribution upward
+        adjusted_returns = generated_returns.copy()
+        for day in range(generated_returns.shape[1]):
+            # Apply progressively stronger adjustments deeper into the simulation
+            day_factor = (day + 1) / generated_returns.shape[1]  # Ranges from 1/window_size to 1
+            daily_adjustment = total_adjustment * day_factor
+            adjusted_returns[:, day] += daily_adjustment
+        
+        return adjusted_returns
 
 
 # Conditional Generator: accepts noise and condition input.
