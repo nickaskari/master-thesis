@@ -16,7 +16,7 @@ load_dotenv(override=True)
 class FashionGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=300, lambda_gp=60, lambda_tail=55, lambda_structure=30):
+                 batch_size=120, n_epochs=2, lambda_gp=60, lambda_tail=55, lambda_structure=30):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -44,7 +44,7 @@ class FashionGAN:
         self.lambda_structure = lambda_structure
         self.lambda_nn = 100.0
         self.lambda_outlier = 150.0 
-        self.lambda_decay = 0.2
+        self.lambda_decay = 0.05
 
         # If returns_df is a DataFrame, select the column for the asset.
         if isinstance(returns_df, pd.DataFrame):
@@ -100,7 +100,7 @@ class FashionGAN:
         n = len(returns_series)
         max_lag = max(lag_periods)
         
-        for i in range(max_lag, n - window_size + 1):
+        for i in range(max_lag, n + 1):
             condition_vector = []
             for lag in lag_periods:
                 window = returns_series.iloc[i - lag:i].to_numpy()
@@ -372,10 +372,11 @@ class FashionGAN:
         batch_size = 1000
 
         with torch.no_grad():
+            new_cond = self.conditions[-252:]
             for _ in range(num_scenarios // batch_size):
                 z = torch.randn(batch_size, self.latent_dim, device=device)
-                indices = np.random.choice(len(self.conditions), size=batch_size, replace=True)
-                cond = torch.tensor(self.conditions[indices], dtype=torch.float32, device=device)
+                indices = np.random.choice(len(new_cond), size=batch_size, replace=True)
+                cond = torch.tensor(new_cond[indices], dtype=torch.float32, device=device)
                 gen_returns = self.generator(z, cond)
                 gen_returns = self.scaler.inverse_transform(gen_returns.cpu().numpy())
                 all_generated_returns.append(gen_returns)
@@ -414,7 +415,7 @@ class FashionGAN:
         batch_size = 1000
         
         with torch.no_grad():
-            rel = self.conditions # [-1:]
+            rel = self.conditions[-252:]
             for _ in range(num_scenarios // batch_size):
                 z = torch.randn(batch_size, self.latent_dim, device=device)
                 condition_indices = np.random.choice(len(rel), batch_size, replace=True)
