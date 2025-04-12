@@ -16,7 +16,7 @@ load_dotenv(override=True)
 class FashionGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=2, lambda_gp=60, lambda_tail=55, lambda_structure=30):
+                 batch_size=120, n_epochs=600, lambda_gp=60, lambda_tail=55, lambda_structure=30):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -44,7 +44,7 @@ class FashionGAN:
         self.lambda_structure = lambda_structure
         self.lambda_nn = 100.0
         self.lambda_outlier = 150.0 
-        self.lambda_decay = 0.05
+        self.lambda_decay = 0.008
 
         # If returns_df is a DataFrame, select the column for the asset.
         if isinstance(returns_df, pd.DataFrame):
@@ -372,7 +372,7 @@ class FashionGAN:
         batch_size = 1000
 
         with torch.no_grad():
-            new_cond = self.conditions[-252:]
+            new_cond = self.conditions[-1:]
             for _ in range(num_scenarios // batch_size):
                 z = torch.randn(batch_size, self.latent_dim, device=device)
                 indices = np.random.choice(len(new_cond), size=batch_size, replace=True)
@@ -392,7 +392,7 @@ class FashionGAN:
         
         return all_generated_returns
     
-    def generate_new_scenarios_from_return(self, new_return, date, save=False, num_scenarios=10000):
+    def generate_new_scenarios_from_return(self, new_return, date, look_back, save=False, num_scenarios=10000):
         
         # Update the returns series with the new return
         if isinstance(self.returns_series, pd.Series):
@@ -415,7 +415,7 @@ class FashionGAN:
         batch_size = 1000
         
         with torch.no_grad():
-            rel = self.conditions[-252:]
+            rel = self.conditions[-look_back:]
             for _ in range(num_scenarios // batch_size):
                 z = torch.randn(batch_size, self.latent_dim, device=device)
                 condition_indices = np.random.choice(len(rel), batch_size, replace=True)
