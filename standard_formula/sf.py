@@ -5,7 +5,6 @@ from dotenv.main import load_dotenv
 import pandas as pd
 load_dotenv(override=True)
 #start_test_date = os.getenv("START_TEST_DATE")
-start_test_date = "2020-01-02"
 
 
 def calculate_asset_pv(asset_values, durations, yield_curve, interest_rate_shocks, scenario='base'):
@@ -94,7 +93,7 @@ def calculate_symmetric_adjustment(start_test_date: str, file_path: str = "../da
     return min(max(SA, -0.1), 0.1)
 
 
-def calculate_equity_risk_scr(asset_values, equity_shock_global, equity_shock_other):
+def calculate_equity_risk_scr(asset_values, equity_shock_global, equity_shock_other, start_test_date):
 
     adj = calculate_symmetric_adjustment(start_test_date)
 
@@ -128,10 +127,14 @@ def calculate_market_risk_scr(market_scr_interest, market_scr_equity, market_scr
         [market_scr_interest, market_scr_equity, market_scr_real_estate, market_scr_spread])
     return np.sqrt(np.dot(risk_vector, np.dot(correlation_matrix, risk_vector)))
 
-def get_yield_curve():
+def get_yield_curve(start_test_date):
     df = pd.read_csv("../data/yield_curves.csv", index_col=0)
 
-    row = df.loc[start_test_date]
+    try:
+        row = df.loc[start_test_date]
+    except KeyError:
+        return None
+    
     a = {}
     for i, j in enumerate(row):
         a[i + 1] = j / 100
@@ -142,6 +145,7 @@ def get_yield_curve():
 def calculate_market_scr(
     asset_values,
     durations, 
+    start_test_date,
     equity_shock_global=-0.39, 
     equity_shock_other=-0.49, 
     real_estate_shock=-0.25, 
@@ -165,12 +169,15 @@ def calculate_market_scr(
 
     #yield_curve = {0: 0.0343, 1: 0.0343, 2: 0.0311, 3: 0.0293, 4: 0.0283, 5: 0.0277, 6: 0.0274, 7: 0.0272, 8: 0.0271, 9: 0.0272, 10: 0.0273}
 
-    yield_curve = get_yield_curve()
+    yield_curve = get_yield_curve(start_test_date)
+
+    if not yield_curve: return None
+
 
     market_scr_interest = calculate_interest_risk_scr(
         asset_values, durations, yield_curve, interest_rate_shocks_up, interest_rate_shocks_down, liability_value, liability_duration)
     market_scr_equity = calculate_equity_risk_scr(
-        asset_values, equity_shock_global, equity_shock_other)
+        asset_values, equity_shock_global, equity_shock_other, start_test_date)
     market_scr_real_estate = calculate_property_risk_scr(
         asset_values, real_estate_shock)
     market_scr_spread = calculate_spread_risk_scr(
@@ -207,10 +214,11 @@ durations = {
     'HY_corp_bonds': 3.14
 }
 
+'''
 scr_results = calculate_market_scr(asset_values, durations)
 for key, value in scr_results.items():
     print(f"{key}: {value:,.3f}")
-
+'''
 
 '''
 This implementation is based on Gatzert & Martin (2012) 
