@@ -137,23 +137,6 @@ def perform_var_backtesting_tests(failures, returns, var_forecast, asset_name, g
     }
 
 def evaluate_risk_metrics(scr_values, realized_delta_bof_values, alpha_values=None):
-    """
-    Evaluates various risk metrics comparing SCR values to realized Delta BOF.
-    
-    Parameters:
-    -----------
-    scr_values : array-like
-        SCR values over time
-    realized_delta_bof_values : array-like
-        Realized Delta BOF values over time
-    alpha_values : list, optional
-        List of alpha values for balanced SCR loss (default: [0.25, 0.5, 0.75])
-    
-    Returns:
-    --------
-    pd.DataFrame
-        Table of test results
-    """
     import numpy as np
     import pandas as pd
     from scipy import stats
@@ -161,59 +144,83 @@ def evaluate_risk_metrics(scr_values, realized_delta_bof_values, alpha_values=No
     if alpha_values is None:
         alpha_values = [0.25, 0.5, 0.75]
     
-    # Calculate the VaR breaches
-    breaches = (realized_delta_bof_values < scr_values).astype(int)
+    significance_level = float(os.getenv("SIGNIFICANCE_LEVEL", "0.05"))
+    alpha_values = [0.25, 0.5, 0.75]
+    realized_delta_bof_values = np.array(realized_delta_bof_values, dtype=np.float64)
+    scr_values = np.array(scr_values, dtype=np.float64)
+
+    if len(realized_delta_bof_values) != len(scr_values):
+
+        min_length = min(len(realized_delta_bof_values), len(scr_values))
+        
+        if len(realized_delta_bof_values) > min_length:
+            realized_delta_bof_values = realized_delta_bof_values[:min_length]
+        
+        if len(scr_values) > min_length:
+            scr_values = scr_values[:min_length]
+
+
+    # Calculate the VaR breaches - convert to list for compatibility
+    breaches = np.where(realized_delta_bof_values < scr_values, 1, 0)
     breach_rate = np.mean(breaches)
-    
+
     # Initialize results dictionary
     results = {
         "Metric": [],
         "Value": [],
         "Description": []
     }
-    
+
     # Balanced SCR Loss for different alpha values
     for alpha in alpha_values:
         bsl = balanced_scr_loss(realized_delta_bof_values, scr_values, alpha)
         results["Metric"].append(f"Balanced SCR Loss (α={alpha})")
         results["Value"].append(bsl)
         results["Description"].append(f"Penalty for {'capital inefficiency' if alpha > 0.5 else 'under-conservatism' if alpha < 0.5 else 'balanced'}")
-    
+
     # Kupiec POF test
+    print("breaches", breaches)
     kupiec_stat, kupiec_pval = kupiec_pof_test(breaches)
     results["Metric"].append("Kupiec POF Test p-value")
     results["Value"].append(kupiec_pval)
     results["Description"].append("Tests if breach frequency matches expected")
-    
+
     # Christoffersen tests
     ind_stat, ind_pval = christoffersen_independence_test(breaches)
     results["Metric"].append("Indep. Test p-value")
     results["Value"].append(ind_pval)
     results["Description"].append("Tests if breaches are independent")
-    
+
     cc_stat, cc_pval = christoffersen_conditional_coverage_test(breaches)
     results["Metric"].append("Cond. Coverage p-value")
     results["Value"].append(cc_pval)
     results["Description"].append("Combined test of frequency and independence")
-    
+
     # Lopez average loss
-    lopez_loss = lopez_average_loss(-realized_delta_bof_values, -scr_values)
+    lopez_loss = lopez_average_loss(realized_delta_bof_values, scr_values)
     results["Metric"].append("Lopez Average Loss")
     results["Value"].append(lopez_loss)
     results["Description"].append("Quadratic loss function for VaR breaches")
-    
+
     # Breach statistics
     results["Metric"].append("Breach Rate")
     results["Value"].append(breach_rate)
     results["Description"].append("Proportion of time when Delta BOF < SCR")
-    
-    # Mean squared error between SCR and realized Delta BOF
-    mse = np.mean((scr_values - realized_delta_bof_values)**2)
-    results["Metric"].append("MSE")
-    results["Value"].append(mse)
-    results["Description"].append("Mean squared error between SCR and Delta BOF")
-    
+
     # Format the results as a pandas DataFrame
     df = pd.DataFrame(results)
-    
+
+    test_metrics = ["Kupiec POF Test p-value", "Indep. Test p-value", "Cond. Coverage p-value"]
+
+    # Add Pass/Fail column with checkmarks or crosses
+    df['Pass/Fail'] = df.apply(
+        lambda row: '✅' if (row['Metric'] in test_metrics and row['Value'] > significance_level) 
+                    else '❌' if row['Metric'] in test_metrics 
+                    else '', 
+        axis=1
+    )
+
+    # Optional: If you want to format the Value column to show fewer decimal places
+    df['Value'] = df['Value'].apply(lambda x: f"{x:.4f}" if isinstance(x, float) else x)
+
     return df
