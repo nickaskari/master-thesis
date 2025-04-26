@@ -434,5 +434,5 @@ class MonteCarloJumpGBM:
         # Calculate SCR (99.5th percentile of losses)
         scr = np.percentile(bof_change, 100 * (1 - 0.995))
         
-        return bof_change, scr
+        return bof_change, scr, simulated_results
 
