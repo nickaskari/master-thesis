@@ -16,7 +16,7 @@ load_dotenv(override=True)
 class FashionGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=1000, lambda_gp=60, lambda_tail=55, lambda_structure=30):
+                 batch_size=120, n_epochs=800, lambda_gp=60, lambda_tail=55, lambda_structure=30):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
@@ -441,6 +441,20 @@ class FashionGAN:
         
         return all_generated_returns
 
+    def reset_returns(self):
+        if isinstance(self.returns_df, pd.DataFrame):
+            self.returns_series = self.returns_df[self.asset_name]
+        else:
+            self.returns_series = self.returns_df
+
+        # Create rolling windows of returns and scale them.
+        self.rolling_returns, self.scaler = self.create_rolling_returns(self.returns_series)
+
+        self.conditions = self.create_multi_lag_conditions(self.returns_series, self.window_size, lag_periods=[251])
+        # Ensure conditions align with rolling returns: discard the first few windows if necessary.
+        min_length = min(len(self.rolling_returns), len(self.conditions))
+        self.rolling_returns = self.rolling_returns[-min_length:]
+        self.conditions = self.conditions[-min_length:]
 
 
 # Conditional Generator: accepts noise and condition input.
