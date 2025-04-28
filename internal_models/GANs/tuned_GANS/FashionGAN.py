@@ -16,7 +16,7 @@ load_dotenv(override=True)
 class FashionGAN:
     # INCREASE LATENT SPACE
     def __init__(self, returns_df, asset_name, latent_dim=200, window_size=252, quarter_length=200, 
-                 batch_size=120, n_epochs=800, lambda_gp=60, lambda_tail=55, lambda_structure=30):
+                 batch_size=120, n_epochs=1000, lambda_gp=60, lambda_tail=55, lambda_structure=30):
         """
         CGAN1: Conditional GAN for equities that conditions on a lagged quarter's cumulative return.
         
