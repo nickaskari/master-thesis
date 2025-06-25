@@ -5,7 +5,7 @@ Code was at times ran using a homemade distributed system created by us,
 Find it at: https://github.com/nickaskari/compute-farm
 
 After which we needed more compute, much of the development environment was migrated to Google Collab.
-This repository contains the key notebooks, models and files which we used. Hence to run the Google Collab notebooks, and environment using google disk must be done.
+This repository contains the main notebooks, models and files which we used. Hence to run the Google Collab notebooks, and environment using google disk must be made.
 For help, or curisoity in doing so yourself, contact us at: nickask12@gmail.com.
 
 ## Setting up Virtual Environment (we are calling it "packages")
